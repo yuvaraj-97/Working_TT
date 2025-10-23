@@ -18,7 +18,7 @@ from .feature_engineering import encode_features, guess_attribute_type
 from .reporting import export_cluster_report_pdf
 
 st.set_page_config(
-    page_title="CLSING Clustering Workbench",
+    page_title="Clustering Workbench",
     page_icon="📊",
     layout="wide",
 )
@@ -88,10 +88,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("CLSING Clustering Workbench")
+st.title("Clustering Workbench")
 st.caption(
-    "Interactive workflow for preparing CLSING clustering inputs using the "
-    "pre-loaded Dataiku dataset."
+    "Interactive workflow for preparing clustering inputs using the pre-loaded "
+    "Dataiku dataset."
 )
 
 if "attribute_config" not in st.session_state:
@@ -218,18 +218,51 @@ def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
 
     filtered_df = consolidated_df.copy()
     selection_values: Dict[str, str] = {}
-    for column, label in [
-        (commodity_col, "Commodity"),
-        (subcommodity_col, "Sub-Commodity"),
-        (detail_col, "Detailed Commodity"),
-    ]:
-        options = ["All"] + sorted(filtered_df[column].dropna().unique().tolist())
-        selected_value = st.selectbox(
-            f"{label}", options=options, index=0, key=f"filter_{label}"
+
+    top_filter_cols = st.columns(2)
+    commodity_options = ["All"] + sorted(
+        filtered_df[commodity_col].dropna().unique().tolist()
+    )
+    with top_filter_cols[0]:
+        commodity_value = st.selectbox(
+            "Commodity",
+            options=commodity_options,
+            index=0,
+            key="filter_Commodity",
         )
-        selection_values[label] = selected_value
-        if selected_value != "All":
-            filtered_df = filtered_df[filtered_df[column] == selected_value]
+    selection_values["Commodity"] = commodity_value
+    if commodity_value != "All":
+        filtered_df = filtered_df[filtered_df[commodity_col] == commodity_value]
+
+    subcommodity_options = ["All"] + sorted(
+        filtered_df[subcommodity_col].dropna().unique().tolist()
+    )
+    with top_filter_cols[1]:
+        subcommodity_value = st.selectbox(
+            "Sub-Commodity",
+            options=subcommodity_options,
+            index=0,
+            key="filter_Sub-Commodity",
+        )
+    selection_values["Sub-Commodity"] = subcommodity_value
+    if subcommodity_value != "All":
+        filtered_df = filtered_df[filtered_df[subcommodity_col] == subcommodity_value]
+
+    bottom_filter_cols = st.columns(2)
+    detail_options = ["All"] + sorted(
+        filtered_df[detail_col].dropna().unique().tolist()
+    )
+    with bottom_filter_cols[0]:
+        detail_value = st.selectbox(
+            "Detailed Commodity",
+            options=detail_options,
+            index=0,
+            key="filter_Detailed Commodity",
+        )
+    selection_values["Detailed Commodity"] = detail_value
+    if detail_value != "All":
+        filtered_df = filtered_df[filtered_df[detail_col] == detail_value]
+
 
     st.metric("Rows after filtering", len(filtered_df))
     st.markdown("</div>", unsafe_allow_html=True)
