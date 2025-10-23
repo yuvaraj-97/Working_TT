@@ -143,7 +143,7 @@ def build_attribute_config(
             columns=["Attribute", "Type", "Unit Extraction", "Fill Ratio", "Include"]
         )
 
-    fill_ratio = df[attributes].notna().mean().round(3)
+    fill_ratio = (df[attributes].notna().mean() * 100).round(1)
 
     config = pd.DataFrame(
         {
@@ -155,7 +155,9 @@ def build_attribute_config(
         }
     )
 
-    return config[["Attribute", "Type", "Unit Extraction", "Fill Ratio", "Include"]]
+    config = config[["Attribute", "Type", "Unit Extraction", "Fill Ratio", "Include"]]
+
+    return config.sort_values("Fill Ratio", ascending=False).reset_index(drop=True)
 
 
 def update_attribute_session_state(
@@ -181,9 +183,12 @@ def update_attribute_session_state(
         how="right",
         suffixes=("", "_new"),
     )
-    merged["Fill Ratio"] = merged["Fill Ratio_new"].fillna(merged["Fill Ratio"]).round(3)
+    merged["Fill Ratio"] = (
+        merged["Fill Ratio_new"].fillna(merged["Fill Ratio"]).round(1)
+    )
     merged = merged.drop(columns=["Fill Ratio_new"])
     merged = merged[["Attribute", "Type", "Unit Extraction", "Fill Ratio", "Include"]]
+    merged = merged.sort_values("Fill Ratio", ascending=False).reset_index(drop=True)
     st.session_state.attribute_config = merged
     st.session_state.attribute_signature = signature
 
@@ -202,8 +207,6 @@ def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
     except KeyError as exc:
         st.error(str(exc))
         st.stop()
-
-    candidate_columns = consolidated_df.columns.tolist()
 
     st.markdown("<div class='material-card'>", unsafe_allow_html=True)
     st.markdown("<div class='material-header'>1. Filter dataset</div>", unsafe_allow_html=True)
@@ -246,13 +249,23 @@ def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
         unsafe_allow_html=True,
     )
 
-    part_number_col = st.selectbox(
-        "Column representing the unique part identifier",
-        options=candidate_columns,
-        index=candidate_columns.index("Part Number")
-        if "Part Number" in candidate_columns
-        else 0,
-    )
+    try:
+        part_number_col = resolve_column(
+            consolidated_df,
+            "Part Number",
+            [
+                "Part Number",
+                "PartNumber",
+                "Part_Number",
+                "Part No",
+                "Part_No",
+            ],
+        )
+    except KeyError as exc:
+        st.error(str(exc))
+        st.stop()
+
+    st.caption(f"Using `{part_number_col}` as the unique part identifier.")
 
     excluded_columns = [commodity_col, subcommodity_col, detail_col, part_number_col]
 
@@ -278,10 +291,10 @@ def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
 
     min_fill_ratio = st.slider(
         "Minimum fill ratio required for clustering",
-        min_value=0.0,
-        max_value=1.0,
-        value=0.7,
-        step=0.05,
+        min_value=0,
+        max_value=100,
+        value=70,
+        step=5,
     )
 
     attribute_editor = st.data_editor(
@@ -307,8 +320,8 @@ def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
                 "Fill Ratio",
                 help="Share of non-null values in the filtered data",
                 min_value=0.0,
-                max_value=1.0,
-                format="{:.0%}",
+                max_value=100.0,
+                format="{:.0f}%",
             ),
         },
         disabled=["Attribute", "Fill Ratio"],
@@ -334,48 +347,66 @@ def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
         unsafe_allow_html=True,
     )
 
-    parameter_cols = st.columns(4)
-    eps_min = parameter_cols[0].number_input(
-        "Eps minimum", min_value=0.01, value=0.10, step=0.01
-    )
-    eps_max = parameter_cols[1].number_input(
-        "Eps maximum", min_value=eps_min + 0.01, value=1.00, step=0.01
-    )
-    eps_step = parameter_cols[2].number_input(
-        "Eps step", min_value=0.01, value=0.05, step=0.01
-    )
-    min_samples = int(
-        parameter_cols[3].number_input("Min samples", min_value=2, value=2, step=1)
-    )
-
-    numeric_weight = st.slider(
-        "Weight applied to numeric attributes",
-        min_value=1.0,
-        max_value=25.0,
-        value=10.0,
-        step=1.0,
-    )
-
     chosen_attributes = selected_attributes_df["Attribute"].tolist()
     chosen_types = selected_attributes_df["Type"].tolist()
     chosen_unit_flags = selected_attributes_df["Unit Extraction"].tolist()
 
     recommended_metric = recommend_dbscan_metric(chosen_types)
-    metric = st.selectbox(
-        "Distance metric",
-        options=["euclidean", "cosine", "jaccard"],
-        index=["euclidean", "cosine", "jaccard"].index(recommended_metric)
-        if recommended_metric in ["euclidean", "cosine", "jaccard"]
-        else 0,
-        help="Override the automatically suggested metric if desired.",
+    available_metrics = ["euclidean", "cosine", "jaccard"]
+
+    manual_configuration = st.toggle(
+        "Configure clustering parameters manually",
+        value=False,
+        help="Enable to fine-tune eps sweep, minimum samples, and weighting.",
     )
 
-    manual_eps = st.number_input(
-        "Manual eps override (leave 0 for automatic recommendation)",
-        min_value=0.0,
-        value=0.0,
-        step=0.01,
-    )
+    if manual_configuration:
+        parameter_cols = st.columns(4)
+        eps_min = parameter_cols[0].number_input(
+            "Eps minimum", min_value=0.01, value=0.10, step=0.01
+        )
+        eps_max = parameter_cols[1].number_input(
+            "Eps maximum", min_value=eps_min + 0.01, value=1.00, step=0.01
+        )
+        eps_step = parameter_cols[2].number_input(
+            "Eps step", min_value=0.01, value=0.05, step=0.01
+        )
+        min_samples = int(
+            parameter_cols[3].number_input("Min samples", min_value=2, value=2, step=1)
+        )
+
+        numeric_weight = st.slider(
+            "Weight applied to numeric attributes",
+            min_value=1.0,
+            max_value=25.0,
+            value=10.0,
+            step=1.0,
+        )
+
+        metric = st.selectbox(
+            "Distance metric",
+            options=available_metrics,
+            index=available_metrics.index(recommended_metric)
+            if recommended_metric in available_metrics
+            else 0,
+            help="Override the automatically suggested metric if desired.",
+        )
+
+        manual_eps = st.number_input(
+            "Manual eps override (leave 0 for automatic recommendation)",
+            min_value=0.0,
+            value=0.0,
+            step=0.01,
+        )
+    else:
+        eps_min = eps_max = eps_step = 0.0  # placeholders for automatic mode
+        min_samples = None
+        numeric_weight = 10.0
+        metric = recommended_metric if recommended_metric in available_metrics else "euclidean"
+        manual_eps = 0.0
+        st.caption(
+            "Automatic mode enabled: the app will infer clustering parameters from the data."
+        )
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -384,20 +415,76 @@ def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
     if not run_clustering:
         return
 
-    eps_values = np.arange(eps_min, eps_max + eps_step / 2, eps_step)
-    if len(eps_values) == 0:
-        st.error("Eps sweep produced no values. Adjust the range and try again.")
-        return
+    progress_text = st.empty()
+    progress_bar = st.progress(0)
+    progress_text.write("Encoding features for clustering…")
+    progress_bar.progress(10)
 
     vectors, _, cat_vectors = encode_features(
         filtered_df, chosen_attributes, chosen_types, chosen_unit_flags, numeric_weight
     )
 
+    progress_text.write("Validating metric selection…")
+    progress_bar.progress(25)
     if metric == "jaccard" and (cat_vectors is None or cat_vectors.size == 0):
         st.warning(
             "Jaccard metric requires at least one categorical attribute. Falling back to Euclidean."
         )
         metric = "euclidean"
+
+    if manual_configuration:
+        eps_values = np.arange(eps_min, eps_max + eps_step / 2, eps_step)
+        min_samples = min_samples if min_samples is not None else 2
+    else:
+        progress_text.write("Estimating eps sweep automatically…")
+        progress_bar.progress(40)
+        feature_matrix = (
+            cat_vectors if metric == "jaccard" and cat_vectors is not None else vectors
+        )
+
+        if feature_matrix.size == 0:
+            eps_values = np.arange(0.1, 1.01, 0.05)
+        else:
+            sample_size = min(500, feature_matrix.shape[0])
+            if sample_size >= 2:
+                sample = feature_matrix[:sample_size]
+                from sklearn.metrics import pairwise_distances
+
+                distances = pairwise_distances(sample, sample, metric=metric)
+                upper = distances[np.triu_indices_from(distances, k=1)]
+                upper = upper[upper > 0]
+                if upper.size == 0:
+                    base_min, base_max = 0.05, 0.5
+                else:
+                    base_min = float(np.percentile(upper, 10))
+                    base_max = float(np.percentile(upper, 90))
+                    if base_min == base_max:
+                        base_max = base_min + 0.05
+                eps_step = max((base_max - base_min) / 20, 0.01)
+                eps_values = np.arange(
+                    max(0.01, base_min), base_max + eps_step / 2, eps_step
+                )
+            else:
+                eps_values = np.arange(0.1, 1.01, 0.05)
+
+        if eps_values.size == 0:
+            eps_values = np.arange(0.1, 1.01, 0.05)
+
+        if min_samples is None:
+            min_samples = max(
+                2,
+                min(
+                    10,
+                    int(np.ceil(np.log10(max(len(filtered_df), 1))) + 1),
+                ),
+            )
+
+    if len(eps_values) == 0:
+        st.error("Eps sweep produced no values. Adjust the range and try again.")
+        return
+
+    progress_text.write("Evaluating clustering candidates…")
+    progress_bar.progress(60)
 
     candidate_df = cluster_and_score(
         filtered_df,
@@ -412,12 +499,14 @@ def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
         st.warning("No valid clusters found with the current configuration.")
         return
 
+    progress_text.write("Selecting optimal parameters…")
+    progress_bar.progress(80)
+
     best_eps = recommend_eps(candidate_df)
     eps_selected = manual_eps if manual_eps > 0 else best_eps
 
-    st.success("Clustering completed.")
-    st.metric("Recommended eps", f"{best_eps:.3f}")
-    st.dataframe(candidate_df, use_container_width=True)
+    progress_text.write("Building final clusters…")
+    progress_bar.progress(90)
 
     from sklearn.cluster import DBSCAN  # local import to avoid circular dependency
 
@@ -431,6 +520,12 @@ def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
     result_df["cluster"] = labels
     result_df = add_likeness_score(result_df, vectors, labels, metric, cat_vectors)
     result_df = enforce_min_cluster_size(result_df, min_size=min_samples)
+
+    progress_bar.progress(100)
+    progress_text.write("Clustering completed.")
+    st.success("Clustering completed.")
+    st.metric("Recommended eps", f"{best_eps:.3f}")
+    st.dataframe(candidate_df, use_container_width=True)
 
     grouped_df = (
         result_df.groupby(part_number_col)[chosen_attributes + ["cluster", "likeness_score"]]
