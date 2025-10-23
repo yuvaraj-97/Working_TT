@@ -5,6 +5,7 @@ from typing import Dict, Iterable, List, Tuple
 import numpy as np
 import pandas as pd
 import streamlit as st
+import altair as alt
 
 from .clustering import (
     add_likeness_score,
@@ -566,16 +567,237 @@ def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
         .reset_index()
     )
 
+    cluster_summary = (
+        result_df[result_df["cluster"] != -1]
+        .groupby("cluster")
+        .agg(
+            cluster_size=("cluster", "count"),
+            mean_likeness=("likeness_score", "mean"),
+        )
+        .reset_index()
+    )
+    cluster_summary["mean_likeness"] = cluster_summary["mean_likeness"].round(3)
+    cluster_summary["cluster_size"] = cluster_summary["cluster_size"].astype(int)
+    cluster_summary = cluster_summary.sort_values("cluster_size", ascending=False)
+
+    roster_parts: Dict[int, List[str]] = {}
+    for cluster_id in cluster_summary["cluster"].tolist():
+        cluster_parts = (
+            result_df[result_df["cluster"] == cluster_id]
+            .nlargest(3, "likeness_score")
+            .get(part_number_col)
+            .astype(str)
+            .tolist()
+        )
+        roster_parts[cluster_id] = cluster_parts
+
     st.markdown("<div class='material-card'>", unsafe_allow_html=True)
     st.markdown(
         "<div class='material-header'>Results overview</div>", unsafe_allow_html=True
     )
-    st.dataframe(result_df.head(100), use_container_width=True)
-
-    cluster_counts = (
-        result_df["cluster"].value_counts().rename_axis("cluster").reset_index(name="count")
+    summary_tab, explorer_tab, diagnostics_tab = st.tabs(
+        ["Summary", "Cluster Explorer", "Diagnostics"]
     )
-    st.bar_chart(cluster_counts.set_index("cluster"))
+
+    with summary_tab:
+        if not cluster_summary.empty:
+            top_summary = cluster_summary.head(3)
+            metric_columns = st.columns(len(top_summary))
+            for idx, (_, row) in enumerate(top_summary.iterrows()):
+                with metric_columns[idx]:
+                    st.metric(
+                        f"Cluster {int(row['cluster'])}",
+                        f"{int(row['cluster_size'])} parts",
+                        help="Top clusters ranked by size",
+                        delta=f"Avg likeness {row['mean_likeness']:.2f}",
+                    )
+
+        scatter_source = cluster_summary.rename(
+            columns={"cluster_size": "Cluster Size", "mean_likeness": "Mean Likeness"}
+        )
+        if not scatter_source.empty:
+            scatter_source["Cluster"] = scatter_source["cluster"].astype(str)
+            scatter_chart = (
+                alt.Chart(scatter_source)
+                .mark_circle(size=220)
+                .encode(
+                    x=alt.X("Cluster Size:Q", title="Cluster size"),
+                    y=alt.Y("Mean Likeness:Q", title="Mean likeness"),
+                    color=alt.Color(
+                        "Mean Likeness:Q",
+                        scale=alt.Scale(scheme="turbo"),
+                        legend=None,
+                    ),
+                    tooltip=[
+                        alt.Tooltip("Cluster", title="Cluster"),
+                        alt.Tooltip("Cluster Size:Q", title="Size"),
+                        alt.Tooltip("Mean Likeness:Q", title="Mean likeness", format=".2f"),
+                    ],
+                )
+                .properties(height=360)
+                .interactive()
+            )
+            st.altair_chart(scatter_chart, use_container_width=True)
+
+        cluster_counts = (
+            result_df["cluster"].value_counts().rename_axis("cluster").reset_index(name="count")
+        )
+        st.bar_chart(cluster_counts.set_index("cluster"))
+        st.dataframe(
+            cluster_summary,
+            use_container_width=True,
+            column_config={
+                "cluster": st.column_config.NumberColumn(
+                    "Cluster", help="Cluster label assigned by DBSCAN"
+                ),
+                "cluster_size": st.column_config.NumberColumn(
+                    "Size", format="%d", help="Number of rows in the cluster"
+                ),
+                "mean_likeness": st.column_config.NumberColumn(
+                    "Mean likeness", format="%.3f"
+                ),
+            },
+        )
+
+    with explorer_tab:
+        if cluster_summary.empty:
+            st.info("No clusters were identified for exploration.")
+        else:
+            cards_per_row = 3
+            rows = [
+                cluster_summary.iloc[i : i + cards_per_row]
+                for i in range(0, len(cluster_summary), cards_per_row)
+            ]
+            for row in rows:
+                card_columns = st.columns(len(row))
+                for col, (_, cluster_row) in zip(card_columns, row.iterrows()):
+                    cluster_id = int(cluster_row["cluster"])
+                    with col:
+                        st.markdown("<div class='material-card'>", unsafe_allow_html=True)
+                        st.markdown(
+                            f"<div class='material-header'>Cluster {cluster_id}</div>",
+                            unsafe_allow_html=True,
+                        )
+                        st.metric("Size", int(cluster_row["cluster_size"]))
+                        st.metric("Mean likeness", f"{cluster_row['mean_likeness']:.2f}")
+                        representatives = roster_parts.get(cluster_id, [])
+                        if representatives:
+                            st.caption(
+                                "Representative parts: "
+                                + ", ".join(representatives)
+                            )
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("---")
+            selected_cluster = st.selectbox(
+                "Inspect cluster", ["All"]
+                + [str(int(c)) for c in cluster_summary["cluster"].tolist()],
+            )
+            if selected_cluster == "All":
+                st.dataframe(grouped_df, use_container_width=True)
+            else:
+                cluster_id = int(selected_cluster)
+                filtered_group = grouped_df[grouped_df["cluster"] == cluster_id]
+                st.dataframe(filtered_group, use_container_width=True)
+
+    with diagnostics_tab:
+        cluster_options = [
+            c for c in sorted(result_df["cluster"].unique()) if int(c) != -1
+        ]
+        if cluster_options:
+            selected_heatmap_cluster = st.selectbox(
+                "Cluster for similarity heatmap", cluster_options
+            )
+            heatmap_matrix = (
+                cat_vectors
+                if metric == "jaccard" and cat_vectors is not None
+                else vectors
+            )
+            cluster_mask = result_df["cluster"].to_numpy() == selected_heatmap_cluster
+            cluster_vectors = heatmap_matrix[cluster_mask]
+            cluster_parts = result_df.loc[cluster_mask, part_number_col].astype(str)
+            if cluster_vectors.shape[0] > 1:
+                from sklearn.metrics import pairwise_distances
+
+                distances = pairwise_distances(
+                    cluster_vectors,
+                    metric=metric if metric != "jaccard" or cat_vectors is not None else "euclidean",
+                )
+                similarity = 1.0 / (1.0 + distances)
+                heatmap_df = pd.DataFrame(
+                    similarity,
+                    index=cluster_parts,
+                    columns=cluster_parts,
+                ).reset_index(names=part_number_col)
+                heatmap_long = heatmap_df.melt(
+                    id_vars=part_number_col,
+                    var_name="Peer",
+                    value_name="Similarity",
+                )
+                heatmap_chart = (
+                    alt.Chart(heatmap_long)
+                    .mark_rect()
+                    .encode(
+                        x=alt.X("Peer:N", title="Peer part"),
+                        y=alt.Y(f"{part_number_col}:N", title="Part"),
+                        color=alt.Color(
+                            "Similarity:Q",
+                            scale=alt.Scale(scheme="blues"),
+                            legend=alt.Legend(title="Similarity"),
+                        ),
+                        tooltip=[
+                            alt.Tooltip(f"{part_number_col}:N", title="Part"),
+                            alt.Tooltip("Peer:N", title="Peer"),
+                            alt.Tooltip("Similarity:Q", format=".3f"),
+                        ],
+                    )
+                    .properties(height=360)
+                )
+                st.altair_chart(heatmap_chart, use_container_width=True)
+            else:
+                st.info("Not enough parts in the selected cluster to compute a heatmap.")
+        else:
+            st.info("No clusters available for heatmap diagnostics.")
+
+        from sklearn.metrics import silhouette_samples
+
+        feature_matrix = (
+            cat_vectors if metric == "jaccard" and cat_vectors is not None else vectors
+        )
+        valid_mask = result_df["cluster"].to_numpy() != -1
+        unique_clusters = np.unique(result_df.loc[valid_mask, "cluster"])
+        if len(unique_clusters) >= 2 and valid_mask.sum() >= len(unique_clusters):
+            sil_values = silhouette_samples(
+                feature_matrix[valid_mask],
+                result_df.loc[valid_mask, "cluster"].to_numpy(),
+                metric=metric,
+            )
+            silhouette_df = pd.DataFrame(
+                {
+                    "Silhouette": sil_values,
+                    "Cluster": result_df.loc[valid_mask, "cluster"].astype(str).to_numpy(),
+                }
+            )
+            silhouette_chart = (
+                alt.Chart(silhouette_df)
+                .mark_bar()
+                .encode(
+                    x=alt.X("Silhouette:Q", bin=alt.Bin(maxbins=25), title="Silhouette score"),
+                    y=alt.Y("count()", title="Count"),
+                    color=alt.Color("Cluster:N", legend=alt.Legend(title="Cluster")),
+                    tooltip=[
+                        alt.Tooltip("Cluster:N", title="Cluster"),
+                        alt.Tooltip("count()", title="Parts"),
+                    ],
+                )
+                .properties(height=320)
+            )
+            st.altair_chart(silhouette_chart, use_container_width=True)
+        else:
+            st.info(
+                "Silhouette scores require at least two populated clusters without noise labels."
+            )
+
     st.markdown("</div>", unsafe_allow_html=True)
 
     excel_bytes = build_excel_workbook(result_df, grouped_df)
