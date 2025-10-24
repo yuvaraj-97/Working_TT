@@ -6,8 +6,8 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from ..models import RunResult
-from ..state import navigate_to
+from models import RunResult
+from state import navigate_to
 
 
 def render_cluster_detail_screen() -> None:
