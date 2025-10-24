@@ -12,16 +12,16 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 
-from .clustering import (
+from clustering import (
     add_likeness_score,
     cluster_and_score,
     enforce_min_cluster_size,
     recommend_dbscan_metric,
     recommend_eps,
 )
-from .exporters import build_excel_workbook
-from .feature_engineering import encode_features, guess_attribute_type
-from .reporting import export_cluster_report_pdf
+from exporters import build_excel_workbook
+from feature_engineering import encode_features, guess_attribute_type
+from reporting import export_cluster_report_pdf
 
 st.set_page_config(
     page_title="Clustering Workbench",
@@ -245,7 +245,7 @@ def store_run_history(result: RunResult) -> None:
 def trigger_clustering_run(config: RunConfig) -> None:
     st.session_state.pending_run = config
     navigate_to("loading")
-    st.experimental_rerun()
+    st.rerun()
 
 
 @st.cache_data(show_spinner=False)
@@ -513,7 +513,7 @@ def execute_pending_run(consolidated_df: pd.DataFrame) -> None:
     config: RunConfig | None = st.session_state.get("pending_run")
     if config is None:
         navigate_to("setup")
-        st.experimental_rerun()
+        st.rerun()
 
     loader = LoadingScreen(
         "Running clustering",
@@ -527,7 +527,7 @@ def execute_pending_run(consolidated_df: pd.DataFrame) -> None:
         st.error(str(exc))
         st.session_state.pending_run = None
         navigate_to("setup")
-        st.experimental_rerun()
+        st.rerun()
 
     loader.finalize("Clustering completed.")
     st.session_state.last_result = result
@@ -535,7 +535,7 @@ def execute_pending_run(consolidated_df: pd.DataFrame) -> None:
     st.session_state.selected_cluster = None
     store_run_history(result)
     navigate_to("results")
-    st.experimental_rerun()
+    st.rerun()
 
 
 def render_setup_screen(consolidated_df: pd.DataFrame) -> None:
@@ -788,12 +788,12 @@ def render_setup_screen(consolidated_df: pd.DataFrame) -> None:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    run_button_columns = st.columns([1, 2, 1])
+    run_button_columns = st.columns([3, 1, 3])
     with run_button_columns[1]:
         run_requested = st.button(
             "Run clustering",
             type="primary",
-            use_container_width=True,
+            use_container_width=False,
         )
 
     if not run_requested:
@@ -882,7 +882,7 @@ def render_results_screen() -> None:
                     ):
                         st.session_state.selected_cluster = cluster_id
                         navigate_to("cluster_detail")
-                        st.experimental_rerun()
+                        st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
