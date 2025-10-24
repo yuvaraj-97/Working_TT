@@ -1,0 +1,170 @@
+"""Styling helpers for the clustering Streamlit app."""
+
+from __future__ import annotations
+
+import streamlit as st
+
+PRIMARY_COLOR = "#6400FF"
+SECONDARY_COLOR = "#bfbfbf"
+TEXT_COLOR = "#FFFFFF"
+CARD_BORDER_COLOR = "#FFFFFF"
+
+
+def configure_page() -> None:
+    """Configure the Streamlit page and apply shared CSS."""
+
+    st.set_page_config(
+        page_title="Clustering Workbench",
+        page_icon="📊",
+        layout="wide",
+    )
+
+    st.markdown(
+        f"""
+        <style>
+            :root {{
+                color-scheme: dark;
+            }}
+            .stApp {{
+                background: radial-gradient(circle at top, #1a1b24, #050507 70%);
+                color: {TEXT_COLOR};
+                font-family: 'Inter', sans-serif;
+            }}
+            .block-container {{
+                padding-top: 1.5rem;
+                padding-bottom: 4rem;
+            }}
+            .material-card {{
+                position: relative;
+                background: rgba(10, 11, 18, 0.88);
+                border-radius: 18px;
+                border: 1px solid {CARD_BORDER_COLOR};
+                padding: 1.5rem;
+                box-shadow: 0 18px 38px rgba(0, 0, 0, 0.45);
+            }}
+            .material-header {{
+                font-size: 1.05rem;
+                font-weight: 600;
+                color: {TEXT_COLOR};
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                margin-bottom: 0.35rem;
+            }}
+            .material-subtitle {{
+                color: {SECONDARY_COLOR};
+                font-size: 0.9rem;
+                margin-bottom: 1.2rem;
+            }}
+            .cluster-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                gap: 1rem;
+            }}
+            .cluster-card {{
+                border-radius: 16px;
+                border: 1px solid {CARD_BORDER_COLOR};
+                padding: 1.25rem;
+                background: rgba(17, 18, 26, 0.92);
+                box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+                height: 100%;
+            }}
+            .cluster-card h4 {{
+                margin: 0;
+                font-size: 1rem;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                color: {TEXT_COLOR};
+            }}
+            .cluster-card .cluster-button {{
+                border: 1px solid {CARD_BORDER_COLOR};
+                background: transparent;
+                color: {TEXT_COLOR};
+                border-radius: 999px;
+                padding: 0.35rem 0.9rem;
+                font-size: 0.85rem;
+                cursor: pointer;
+            }}
+            .cluster-card .cluster-button:hover {{
+                border-color: {PRIMARY_COLOR};
+                color: {PRIMARY_COLOR};
+            }}
+            .cluster-card .cluster-metric {{
+                margin-top: 1rem;
+                display: grid;
+                gap: 0.5rem;
+            }}
+            .stButton > button,
+            .stDownloadButton button {{
+                border-radius: 999px;
+                border: 1px solid {PRIMARY_COLOR};
+                background: linear-gradient(135deg, {PRIMARY_COLOR}, #3b0bff);
+                color: {TEXT_COLOR};
+                font-weight: 600;
+                padding: 0.6rem 1.6rem;
+                box-shadow: 0 14px 32px rgba(100, 0, 255, 0.35);
+            }}
+            .stButton > button:hover,
+            .stDownloadButton button:hover {{
+                box-shadow: 0 18px 36px rgba(100, 0, 255, 0.55);
+            }}
+            div[data-testid="stMetricValue"] {{
+                color: {TEXT_COLOR};
+            }}
+            .stDataFrame, .stDataFrame [data-testid="stTable"] {{
+                color: {TEXT_COLOR};
+            }}
+            .stDataFrame thead tr th {{
+                background-color: rgba(16, 18, 28, 0.8);
+            }}
+            .stDataFrame tbody tr td {{
+                background-color: rgba(8, 10, 18, 0.6);
+            }}
+            .loading-overlay {{
+                position: fixed;
+                inset: 0;
+                background: rgba(5, 5, 7, 0.94);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+                backdrop-filter: blur(12px);
+            }}
+            .loading-card {{
+                width: min(420px, 90vw);
+                padding: 2.5rem;
+                border-radius: 24px;
+                background: linear-gradient(150deg, rgba(10, 11, 18, 0.95), rgba(17, 18, 26, 0.95));
+                border: 1px solid {CARD_BORDER_COLOR};
+                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+                text-align: center;
+            }}
+            .loading-card .loading-title {{
+                font-size: 1.35rem;
+                font-weight: 600;
+                color: {TEXT_COLOR};
+                margin-bottom: 0.65rem;
+            }}
+            .loading-card .loading-subtitle {{
+                color: {SECONDARY_COLOR};
+                font-size: 0.95rem;
+                margin-bottom: 1.4rem;
+            }}
+            .loading-card .loading-status {{
+                color: {TEXT_COLOR};
+                font-size: 0.95rem;
+                margin-bottom: 0.75rem;
+            }}
+            .loading-overlay div[data-testid="stProgressBar"] > div {{
+                background-color: rgba(255, 255, 255, 0.12);
+                border-radius: 999px;
+            }}
+            .loading-overlay div[data-testid="stProgressBar"] div[role="progressbar"] {{
+                background: linear-gradient(135deg, {PRIMARY_COLOR}, #2f00b5);
+                border-radius: 999px;
+            }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
