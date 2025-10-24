@@ -89,6 +89,53 @@ st.markdown(
         .block-container {
             padding-top: 2rem;
         }
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.92);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(12px);
+        }
+        .loading-card {
+            width: min(420px, 90vw);
+            padding: 2.5rem;
+            border-radius: 24px;
+            background: linear-gradient(
+                145deg,
+                rgba(30, 41, 59, 0.95),
+                rgba(15, 23, 42, 0.95)
+            );
+            box-shadow: 0 24px 64px rgba(8, 47, 73, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            text-align: center;
+        }
+        .loading-card .loading-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #f8fafc;
+            margin-bottom: 0.5rem;
+        }
+        .loading-card .loading-subtitle {
+            color: #cbd5f5;
+            font-size: 0.95rem;
+            margin-bottom: 1.5rem;
+        }
+        .loading-card .loading-status {
+            color: #e2e8f0;
+            font-size: 0.95rem;
+            margin-bottom: 0.75rem;
+        }
+        .loading-overlay div[data-testid="stProgressBar"] > div {
+            background-color: rgba(148, 163, 184, 0.2);
+            border-radius: 999px;
+        }
+        .loading-overlay div[data-testid="stProgressBar"] div[role="progressbar"] {
+            background: linear-gradient(135deg, #38bdf8, #6366f1);
+            border-radius: 999px;
+        }
     </style>
     """,
     unsafe_allow_html=True,
@@ -107,6 +154,7 @@ if "attribute_config" not in st.session_state:
 
 @dataclass
 class RunConfig:
+    dataset_name: str
     filters: Dict[str, str]
     column_mapping: Dict[str, str]
     part_number_col: str
@@ -142,30 +190,39 @@ class RunResult:
 
 class LoadingScreen:
     def __init__(self, title: str, subtitle: str | None = None):
-        self.container = st.container()
-        with self.container:
-            st.markdown("<div class='material-card'>", unsafe_allow_html=True)
+        self.container = st.empty()
+        with self.container.container():
             st.markdown(
-                f"<div class='material-header'>{title}</div>",
+                "<div class='loading-overlay'><div class='loading-card'>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f"<div class='loading-title'>{title}</div>",
                 unsafe_allow_html=True,
             )
             if subtitle:
                 st.markdown(
-                    f"<div class='material-subtitle'>{subtitle}</div>",
+                    f"<div class='loading-subtitle'>{subtitle}</div>",
                     unsafe_allow_html=True,
                 )
             self.status_placeholder = st.empty()
             self.progress_bar = st.progress(0)
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div></div>", unsafe_allow_html=True)
 
     def update(self, message: str, percent_complete: int) -> None:
         percent_complete = max(0, min(100, percent_complete))
-        self.status_placeholder.write(message)
+        self.status_placeholder.markdown(
+            f"<div class='loading-status'>{message}</div>",
+            unsafe_allow_html=True,
+        )
         self.progress_bar.progress(percent_complete)
 
     def finalize(self, message: str | None = None) -> None:
         if message:
-            self.status_placeholder.write(message)
+            self.status_placeholder.markdown(
+                f"<div class='loading-status'>{message}</div>",
+                unsafe_allow_html=True,
+            )
         self.progress_bar.progress(100)
 
     def clear(self) -> None:
@@ -185,6 +242,20 @@ def initialize_app_state() -> None:
         st.session_state.selected_cluster = None
     if "last_screen" not in st.session_state:
         st.session_state.last_screen = "setup"
+
+
+def reset_app_state() -> None:
+    st.session_state.screen = "setup"
+    st.session_state.last_screen = "setup"
+    for key in [
+        "pending_run",
+        "last_result",
+        "selected_cluster",
+        "attribute_config",
+        "attribute_signature",
+    ]:
+        if key in st.session_state:
+            del st.session_state[key]
 
 
 def navigate_to(screen: str) -> None:
@@ -233,6 +304,7 @@ def store_run_history(result: RunResult) -> None:
             "clusters": int(result.cluster_summary.shape[0]),
             "eps": float(result.eps_selected),
             "metric": result.metric,
+            "dataset": result.config.dataset_name,
             "filters": result.config.filters,
             "attributes": result.config.chosen_attributes,
         },
@@ -270,6 +342,68 @@ def load_clustering_dataset(name: str = "Clustering") -> pd.DataFrame:
         raise RuntimeError(f"Failed to read Dataiku dataset '{name}': {exc}") from exc
 
     return dataframe
+
+
+@st.cache_data(show_spinner=False)
+def list_streamlit_datasets(zone_name: str = "StreamLit") -> List[str]:
+    """Return the datasets available in the specified Dataiku flow zone."""
+
+    try:
+        import dataiku  # type: ignore
+    except ImportError as exc:  # pragma: no cover - environment guard
+        raise RuntimeError(
+            "Dataiku Python package is required to list datasets for the app."
+        ) from exc
+
+    client = dataiku.api_client()
+    project = client.get_default_project()
+
+    try:
+        zones = project.list_flow_zones()
+    except Exception as exc:  # pragma: no cover - defensive message for runtime
+        raise RuntimeError(f"Unable to list flow zones: {exc}") from exc
+
+    streamlit_zone_id = None
+    for zone in zones:
+        if zone.get("name") == zone_name:
+            streamlit_zone_id = zone.get("id")
+            break
+
+    if streamlit_zone_id is None:
+        raise RuntimeError(f"Flow zone '{zone_name}' was not found in the project.")
+
+    try:
+        dataset_summaries = project.list_datasets()
+    except Exception as exc:  # pragma: no cover - defensive message for runtime
+        raise RuntimeError(f"Unable to list datasets: {exc}") from exc
+
+    dataset_names: List[str] = []
+    for summary in dataset_summaries:
+        zone_id = (
+            summary.get("zone")
+            or summary.get("zoneId")
+            or summary.get("flowZone")
+        )
+        if zone_id is None:
+            try:
+                definition = project.get_dataset(summary["name"]).get_definition()
+            except Exception:
+                continue
+            zone_id = (
+                definition.get("zone")
+                or definition.get("zoneId")
+                or definition.get("flowZone")
+            )
+        if zone_id == streamlit_zone_id:
+            dataset_names.append(summary["name"])
+
+    unique_names = sorted(dict.fromkeys(dataset_names))
+    if not unique_names:
+        raise RuntimeError(
+            f"No datasets were found in the '{zone_name}' flow zone."
+        )
+
+    return unique_names
 
 
 def resolve_column(df: pd.DataFrame, label: str, candidates: Iterable[str]) -> str:
@@ -524,6 +658,7 @@ def execute_pending_run(consolidated_df: pd.DataFrame) -> None:
         result = perform_clustering(consolidated_df, config, loader)
     except ValueError as exc:
         loader.finalize("Unable to complete clustering.")
+        loader.clear()
         st.error(str(exc))
         st.session_state.pending_run = None
         navigate_to("setup")
@@ -538,7 +673,9 @@ def execute_pending_run(consolidated_df: pd.DataFrame) -> None:
     st.rerun()
 
 
-def render_setup_screen(consolidated_df: pd.DataFrame) -> None:
+def render_setup_screen(
+    consolidated_df: pd.DataFrame, dataset_name: str, dataset_options: List[str]
+) -> None:
     try:
         commodity_col = resolve_column(consolidated_df, "Commodity", ["Commodity"])
         subcommodity_col = resolve_column(
@@ -581,10 +718,29 @@ def render_setup_screen(consolidated_df: pd.DataFrame) -> None:
     selection_values: Dict[str, str] = {}
 
     top_filter_cols = st.columns(2)
+    with top_filter_cols[0]:
+        dataset_index = (
+            dataset_options.index(dataset_name)
+            if dataset_name in dataset_options
+            else 0
+        )
+        chosen_dataset = st.selectbox(
+            "Dataset",
+            options=dataset_options,
+            index=dataset_index,
+            key="dataset_selector",
+        )
+    if chosen_dataset != dataset_name:
+        st.session_state.active_dataset = chosen_dataset
+        reset_app_state()
+        st.rerun()
+
+    st.caption(f"Using `{dataset_name}` from the StreamLit flow zone.")
+
     commodity_options = ["All"] + sorted(
         filtered_df[commodity_col].dropna().unique().tolist()
     )
-    with top_filter_cols[0]:
+    with top_filter_cols[1]:
         selection_values["Commodity"] = st.selectbox(
             "Commodity",
             options=commodity_options,
@@ -594,10 +750,11 @@ def render_setup_screen(consolidated_df: pd.DataFrame) -> None:
     if selection_values["Commodity"] != "All":
         filtered_df = filtered_df[filtered_df[commodity_col] == selection_values["Commodity"]]
 
+    sub_filter_cols = st.columns(2)
     subcommodity_options = ["All"] + sorted(
         filtered_df[subcommodity_col].dropna().unique().tolist()
     )
-    with top_filter_cols[1]:
+    with sub_filter_cols[0]:
         selection_values["Sub-Commodity"] = st.selectbox(
             "Sub-Commodity",
             options=subcommodity_options,
@@ -609,11 +766,10 @@ def render_setup_screen(consolidated_df: pd.DataFrame) -> None:
             filtered_df[subcommodity_col] == selection_values["Sub-Commodity"]
         ]
 
-    bottom_filter_cols = st.columns(2)
     detail_options = ["All"] + sorted(
         filtered_df[detail_col].dropna().unique().tolist()
     )
-    with bottom_filter_cols[0]:
+    with sub_filter_cols[1]:
         selection_values["Detailed Commodity"] = st.selectbox(
             "Detailed Commodity",
             options=detail_options,
@@ -653,7 +809,7 @@ def render_setup_screen(consolidated_df: pd.DataFrame) -> None:
     )
 
     signature = (
-        "Clustering",
+        dataset_name,
         tuple(selection_values.items()),
         part_number_col,
         hide_empty_attributes,
@@ -800,6 +956,7 @@ def render_setup_screen(consolidated_df: pd.DataFrame) -> None:
         return
 
     config = RunConfig(
+        dataset_name=dataset_name,
         filters=selection_values.copy(),
         column_mapping=column_mapping,
         part_number_col=part_number_col,
@@ -831,6 +988,7 @@ def render_results_screen() -> None:
         "<div class='material-header'>Clustering summary</div>",
         unsafe_allow_html=True,
     )
+    st.caption(f"Dataset: {result.config.dataset_name}")
 
     metric_columns = st.columns(3)
     with metric_columns[0]:
@@ -862,10 +1020,11 @@ def render_results_screen() -> None:
             card_columns = st.columns(len(row))
             for column, (_, cluster_row) in zip(card_columns, row.iterrows()):
                 cluster_id = int(cluster_row["cluster"])
+                cluster_label = cluster_id + 1
                 with column:
                     st.markdown("<div class='material-card'>", unsafe_allow_html=True)
                     st.markdown(
-                        f"<div class='material-header'>Cluster {cluster_id}</div>",
+                        f"<div class='material-header'>Cluster {cluster_label}</div>",
                         unsafe_allow_html=True,
                     )
                     st.metric("Size", int(cluster_row["cluster_size"]))
@@ -965,12 +1124,14 @@ def render_cluster_detail_screen() -> None:
     )
 
     summary_row = cluster_summary[cluster_summary["cluster"] == cluster_id].iloc[0]
+    cluster_label = int(cluster_id) + 1
 
     st.markdown("<div class='material-card'>", unsafe_allow_html=True)
     st.markdown(
-        f"<div class='material-header'>Cluster {int(cluster_id)} overview</div>",
+        f"<div class='material-header'>Cluster {cluster_label} overview</div>",
         unsafe_allow_html=True,
     )
+    st.caption(f"Dataset: {result.config.dataset_name}")
 
     overview_columns = st.columns(3)
     with overview_columns[0]:
@@ -1087,6 +1248,7 @@ def render_history_screen() -> None:
             f"<div class='material-header'>Run from {entry['timestamp']}</div>",
             unsafe_allow_html=True,
         )
+        st.caption(f"Dataset: {summary['dataset']}")
         st.caption(
             "Filters: "
             + ", ".join(
@@ -1107,6 +1269,7 @@ def render_history_screen() -> None:
             key=f"history_rerun_{entry['id']}",
             use_container_width=True,
         ):
+            st.session_state.active_dataset = config.dataset_name
             trigger_clustering_run(copy.deepcopy(config))
 
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1114,7 +1277,9 @@ def render_history_screen() -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
+def render_by_commodity(
+    dataset_options: List[str], dataset_name: str, consolidated_df: pd.DataFrame
+) -> None:
     initialize_app_state()
 
     if st.session_state.screen == "loading":
@@ -1145,7 +1310,7 @@ def render_by_commodity(consolidated_df: pd.DataFrame) -> None:
         st.session_state.last_screen = st.session_state.screen
 
     if st.session_state.screen == "setup":
-        render_setup_screen(consolidated_df)
+        render_setup_screen(consolidated_df, dataset_name, dataset_options)
     elif st.session_state.screen == "results":
         render_results_screen()
     elif st.session_state.screen == "cluster_detail":
@@ -1160,7 +1325,22 @@ def render_by_part(_: pd.DataFrame) -> None:
 
 def main() -> None:
     try:
-        consolidated_df = load_clustering_dataset()
+        dataset_options = list_streamlit_datasets()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        st.stop()
+
+    if not dataset_options:
+        st.error("No datasets are available in the StreamLit flow zone.")
+        st.stop()
+
+    active_dataset = st.session_state.get("active_dataset")
+    if active_dataset not in dataset_options:
+        active_dataset = dataset_options[0]
+        st.session_state.active_dataset = active_dataset
+
+    try:
+        consolidated_df = load_clustering_dataset(active_dataset)
     except RuntimeError as exc:
         st.error(str(exc))
         st.stop()
@@ -1172,7 +1352,7 @@ def main() -> None:
     )
 
     if view_mode == "By Commodity":
-        render_by_commodity(consolidated_df)
+        render_by_commodity(dataset_options, active_dataset, consolidated_df)
     else:
         render_by_part(consolidated_df)
 
