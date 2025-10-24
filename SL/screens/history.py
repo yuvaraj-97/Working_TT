@@ -6,8 +6,8 @@ import copy
 
 import streamlit as st
 
-from ..models import RunConfig
-from ..state import trigger_clustering_run
+from models import RunConfig
+from state import trigger_clustering_run
 
 
 def render_history_screen() -> None:

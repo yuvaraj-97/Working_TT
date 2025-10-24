@@ -9,10 +9,10 @@ import streamlit as st
 
 from clustering import recommend_dbscan_metric
 
-from ..data_access import resolve_column
-from ..models import RunConfig
-from ..state import reset_app_state, trigger_clustering_run
-from ..workflow import prepare_attribute_config
+from data_access import resolve_column
+from models import RunConfig
+from state import reset_app_state, trigger_clustering_run
+from workflow import prepare_attribute_config
 
 
 def render_setup_screen(

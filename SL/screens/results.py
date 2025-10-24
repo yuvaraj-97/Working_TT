@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ..models import RunResult
-from ..state import navigate_to
-from ..workflow import build_downloads
+from models import RunResult
+from state import navigate_to
+from workflow import build_downloads
 
 
 def render_results_screen() -> None:
