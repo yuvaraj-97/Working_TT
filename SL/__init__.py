@@ -1,1 +1,1 @@
-"""Streamlit application package for interactive CLSING clustering."""
+"""Modular Streamlit application for the clustering workbench."""
