@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import streamlit as st
 
-from .models import RunConfig, RunResult
+from models import RunConfig, RunResult
 
 
 def initialize_app_state() -> None:
