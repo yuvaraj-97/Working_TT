@@ -49,14 +49,12 @@ def render_navigation() -> None:
         current_screen = options[0]
 
     default_label = SCREEN_TITLES.get(current_screen, labels[0])
-    st.session_state.navigation_menu = default_label
     selected_label = st.sidebar.radio(
         "Navigate",
         options=labels,
-        index=labels.index(st.session_state.navigation_menu),
+        index=labels.index(st.session_state.get("navigation_menu", default_label)),
         key="navigation_menu",
     )
-    st.session_state.navigation_menu = selected_label
     selected_screen = label_to_screen[selected_label]
 
     if selected_screen != st.session_state.screen:
