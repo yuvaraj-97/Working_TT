@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from data_access import list_streamlit_datasets, load_clustering_dataset
+from data_access import load_clustering_dataset
 from screens import (
     render_cluster_detail_screen,
     render_history_screen,
@@ -26,6 +26,9 @@ SCREEN_TITLES = {
     "cluster_detail": "Cluster Detail",
     "history": "History",
 }
+
+
+DATASET_OPTIONS = ["A", "B", "C"]
 
 
 def ensure_attribute_state() -> None:
@@ -94,14 +97,10 @@ def main() -> None:
 
     ensure_attribute_state()
 
-    try:
-        dataset_options = list_streamlit_datasets()
-    except RuntimeError as exc:
-        st.error(str(exc))
-        st.stop()
+    dataset_options = DATASET_OPTIONS
 
     if not dataset_options:
-        st.error("No datasets are available in the StreamLit flow zone.")
+        st.error("No datasets are configured for the Commodity selection.")
         st.stop()
 
     active_dataset = st.session_state.get("active_dataset")
