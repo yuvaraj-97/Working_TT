@@ -7,7 +7,7 @@ import streamlit as st
 PRIMARY_COLOR = "#6400FF"
 SECONDARY_COLOR = "#bfbfbf"
 TEXT_COLOR = "#FFFFFF"
-CARD_BORDER_COLOR = "#FFFFFF"
+CARD_BORDER_COLOR = "rgba(255, 255, 255, 0.18)"
 
 
 def configure_page() -> None:
@@ -38,7 +38,7 @@ def configure_page() -> None:
                 position: relative;
                 background: rgba(10, 11, 18, 0.88);
                 border-radius: 18px;
-                border: 1px solid {CARD_BORDER_COLOR};
+                border: none;
                 padding: 1.5rem;
                 box-shadow: 0 18px 38px rgba(0, 0, 0, 0.45);
             }}
@@ -63,7 +63,7 @@ def configure_page() -> None:
             }}
             .cluster-card {{
                 border-radius: 16px;
-                border: 1px solid {CARD_BORDER_COLOR};
+                border: none;
                 padding: 1.25rem;
                 background: rgba(17, 18, 26, 0.92);
                 box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
@@ -136,7 +136,7 @@ def configure_page() -> None:
                 padding: 2.5rem;
                 border-radius: 24px;
                 background: linear-gradient(150deg, rgba(10, 11, 18, 0.95), rgba(17, 18, 26, 0.95));
-                border: 1px solid {CARD_BORDER_COLOR};
+                border: none;
                 box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
                 text-align: center;
             }}

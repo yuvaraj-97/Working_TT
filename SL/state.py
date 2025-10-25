@@ -38,6 +38,8 @@ def reset_app_state() -> None:
         "selected_cluster",
         "attribute_config",
         "attribute_signature",
+        "attribute_selection_confirmed",
+        "attribute_selection_threshold",
     ]:
         st.session_state.pop(key, None)
 
@@ -53,12 +55,7 @@ def navigate_to(screen: str) -> None:
 def available_navigation_options() -> List[str]:
     """Return the list of screens that should be visible in navigation."""
 
-    options = ["setup"]
-    if st.session_state.get("last_result") is not None:
-        options.extend(["results", "cluster_detail"])
-    if st.session_state.get("run_history"):
-        options.append("history")
-    return options
+    return ["setup", "results", "cluster_detail", "history"]
 
 
 def store_run_history(result: RunResult) -> None:
@@ -72,7 +69,9 @@ def store_run_history(result: RunResult) -> None:
             "clusters": int(result.cluster_summary.shape[0]),
             "eps": float(result.eps_selected),
             "metric": result.metric,
-            "dataset": result.config.dataset_name,
+            "dataset": result.config.filters.get(
+                "Commodity", result.config.dataset_name
+            ),
             "filters": result.config.filters,
             "attributes": result.config.chosen_attributes,
         },

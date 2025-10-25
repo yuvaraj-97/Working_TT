@@ -7,6 +7,8 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 import streamlit as st
+from sklearn.cluster import DBSCAN
+from sklearn.neighbors import NearestNeighbors
 
 from clustering import (
     add_likeness_score,
@@ -23,6 +25,41 @@ from data_access import apply_filters
 from models import RunConfig, RunResult
 from state import navigate_to, store_run_history
 from ui.loading import LoadingScreen
+
+
+def _auto_eps_sweep(feature_matrix: np.ndarray, metric: str) -> np.ndarray:
+    """Derive a reasonable epsilon sweep based on nearest-neighbour distances."""
+
+    if feature_matrix.size == 0 or feature_matrix.shape[0] < 2:
+        return np.array([0.5])
+
+    neighbour_count = min(10, feature_matrix.shape[0] - 1)
+    if neighbour_count <= 0:
+        return np.array([0.5])
+
+    metric_name = metric if metric in {"euclidean", "cosine", "jaccard"} else "euclidean"
+    try:
+        nn = NearestNeighbors(n_neighbors=neighbour_count + 1, metric=metric_name)
+        nn.fit(feature_matrix)
+        distances, _ = nn.kneighbors(feature_matrix)
+    except Exception:
+        nn = NearestNeighbors(n_neighbors=neighbour_count + 1, metric="euclidean")
+        nn.fit(feature_matrix)
+        distances, _ = nn.kneighbors(feature_matrix)
+
+    distances = distances[:, 1:]
+    if distances.size == 0:
+        return np.array([0.5])
+
+    kth_distances = distances[:, -1]
+    lower, upper = np.percentile(kth_distances, [15, 85])
+    min_eps = max(lower, 0.01)
+    max_eps = max(upper, min_eps + 0.05)
+    step = max((max_eps - min_eps) / 20, 0.01)
+
+    values = np.arange(min_eps, max_eps + step, step)
+    values = np.clip(values, 0.01, None)
+    return np.unique(values)
 
 
 def perform_clustering(
@@ -65,41 +102,83 @@ def perform_clustering(
             config.eps_max + (config.eps_step or 0) / 2,
             config.eps_step,
         )
+        if eps_values.size == 0:
+            raise ValueError("Manual epsilon sweep produced no values.")
         min_samples = config.min_samples if config.min_samples is not None else 2
     else:
         feature_matrix = (
             cat_vectors if metric == "jaccard" and cat_vectors is not None else vectors
         )
-        loader.update("Recommending epsilon…", 60)
-        eps_values, min_samples = recommend_eps(
-            feature_matrix,
-            metric,
-            config.manual_eps,
-        )
+        loader.update("Estimating epsilon sweep…", 55)
+        eps_values = _auto_eps_sweep(feature_matrix, metric)
+        min_samples = 2
 
-    loader.update("Clustering candidate sweeps…", 75)
-    candidate_df, roster_parts = cluster_and_score(
+    loader.update("Evaluating candidate clusters…", 70)
+    candidate_df = cluster_and_score(
+        filtered_df,
         vectors,
-        metric,
         eps_values,
-        min_samples,
-        config.chosen_attributes,
-        config.chosen_types,
-        config.part_number_col,
+        metric,
         cat_vectors=cat_vectors,
+        min_samples=min_samples,
     )
 
     if candidate_df.empty:
         raise ValueError("No viable clustering configuration was produced.")
 
+    candidate_df = candidate_df.copy()
+    candidate_df["score"] = (
+        candidate_df["silhouette_score"]
+        * (1 - candidate_df["proportion_noise"])
+        * np.log(candidate_df["num_clusters"] + 1)
+    )
+    candidate_df = candidate_df.sort_values("score", ascending=False).reset_index(
+        drop=True
+    )
+
     loader.update("Selecting best cluster result…", 85)
-    result_df = add_likeness_score(candidate_df.iloc[0]["result_df"])
-    grouped_df = candidate_df.iloc[0]["grouped_df"]
-    eps_selected = candidate_df.iloc[0]["eps"]
-    candidate_df = candidate_df.drop(columns=["result_df", "grouped_df"])
+    recommended_eps = float(recommend_eps(candidate_df))
+    if config.manual_configuration and config.manual_eps is not None:
+        eps_selected = float(config.manual_eps)
+    else:
+        eps_selected = recommended_eps
+
+    candidate_df["recommended"] = np.isclose(
+        candidate_df["eps"], eps_selected, rtol=1e-4, atol=1e-4
+    )
+    candidate_df = candidate_df.rename(
+        columns={"score": "Score", "recommended": "Recommended"}
+    )
+
+    loader.update("Generating final clusters…", 90)
+    db = DBSCAN(eps=eps_selected, min_samples=min_samples, metric=metric)
+    if metric == "jaccard" and cat_vectors is not None:
+        labels = db.fit_predict(cat_vectors)
+    else:
+        labels = db.fit_predict(vectors)
+
+    result_df = filtered_df.copy()
+    result_df["cluster"] = labels
+    result_df = add_likeness_score(result_df, vectors, labels, metric, cat_vectors)
+    result_df = enforce_min_cluster_size(result_df, min_size=2)
+
+    grouped_df = (
+        result_df.groupby(config.part_number_col)[
+            config.chosen_attributes + ["cluster", "likeness_score"]
+        ]
+        .first()
+        .reset_index()
+    )
+
+    roster_parts = (
+        result_df[result_df["cluster"] != -1]
+        .sort_values(["cluster", "likeness_score"], ascending=[True, False])
+        .groupby("cluster")[config.part_number_col]
+        .apply(lambda series: series.astype(str).head(3).tolist())
+        .to_dict()
+    )
 
     loader.update("Calculating cluster summary…", 95)
-    grouped_df = enforce_min_cluster_size(grouped_df, min_size=2)
     cluster_summary = (
         grouped_df.groupby("cluster")["likeness_score"].agg(
             cluster_size="count", mean_likeness="mean"
