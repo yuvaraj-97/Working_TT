@@ -16,7 +16,10 @@ from workflow import prepare_attribute_config
 
 
 def render_setup_screen(
-    consolidated_df: pd.DataFrame, dataset_name: str, dataset_options: List[str]
+    consolidated_df: pd.DataFrame,
+    dataset_name: str,
+    dataset_options: List[str],
+    dataset_aliases: Dict[str, str],
 ) -> None:
     """Render the form used to configure a clustering run."""
 
@@ -51,8 +54,11 @@ def render_setup_screen(
         "Detailed Commodity": detail_col,
     }
 
+    st.session_state.setdefault("attribute_selection_confirmed", False)
+    st.session_state.setdefault("attribute_selection_threshold", 70)
+
     st.markdown("<div class='material-card'>", unsafe_allow_html=True)
-    st.markdown("<div class='material-header'>1. Filter dataset</div>", unsafe_allow_html=True)
+    st.markdown("<div class='material-header'>Filter dataset</div>", unsafe_allow_html=True)
     st.markdown(
         "<div class='material-subtitle'>Refine the dataset using the commodity hierarchy before clustering.</div>",
         unsafe_allow_html=True,
@@ -61,59 +67,60 @@ def render_setup_screen(
     filtered_df = consolidated_df.copy()
     selection_values: Dict[str, str] = {}
 
-    top_filter_cols = st.columns(2)
-    with top_filter_cols[0]:
-        dataset_index = (
-            dataset_options.index(dataset_name)
-            if dataset_name in dataset_options
-            else 0
+    alias_options = [dataset_aliases.get(name, name) for name in dataset_options]
+    alias_to_dataset = {dataset_aliases.get(name, name): name for name in dataset_options}
+    current_alias = dataset_aliases.get(dataset_name, dataset_name)
+    if current_alias not in alias_options:
+        alias_options = [current_alias] + alias_options
+
+    filter_cols = st.columns(3)
+    with filter_cols[0]:
+        alias_index = (
+            alias_options.index(current_alias) if current_alias in alias_options else 0
         )
-        chosen_dataset = st.selectbox(
-            "Dataset",
-            options=dataset_options,
-            index=dataset_index,
+        chosen_alias = st.selectbox(
+            "Commodity",
+            options=alias_options,
+            index=alias_index,
             key="dataset_selector",
         )
+
+    chosen_dataset = alias_to_dataset.get(chosen_alias, dataset_name)
     if chosen_dataset != dataset_name:
         st.session_state.active_dataset = chosen_dataset
         reset_app_state()
         st.rerun()
 
-    st.caption(f"Using `{dataset_name}` from the StreamLit flow zone.")
-
-    commodity_options = ["All"] + sorted(
-        filtered_df[commodity_col].dropna().unique().tolist()
+    selection_values["Commodity"] = chosen_alias
+    st.caption(
+        f"Using `{chosen_alias}` commodity dataset from the StreamLit flow zone."
     )
-    with top_filter_cols[1]:
-        selection_values["Commodity"] = st.selectbox(
-            "Commodity",
-            options=commodity_options,
-            index=0,
-            key="filter_Commodity",
-        )
-    if selection_values["Commodity"] != "All":
-        filtered_df = filtered_df[filtered_df[commodity_col] == selection_values["Commodity"]]
 
-    sub_filter_cols = st.columns(2)
-    subcommodity_options = ["All"] + sorted(
-        filtered_df[subcommodity_col].dropna().unique().tolist()
+    if commodity_col in filtered_df.columns:
+        filtered_df = filtered_df[
+            filtered_df[commodity_col].astype(str) == chosen_alias
+        ]
+
+    sub_options = ["All"] + sorted(
+        filtered_df[subcommodity_col].dropna().astype(str).unique().tolist()
     )
-    with sub_filter_cols[0]:
+    with filter_cols[1]:
         selection_values["Sub-Commodity"] = st.selectbox(
             "Sub-Commodity",
-            options=subcommodity_options,
+            options=sub_options,
             index=0,
             key="filter_Sub-Commodity",
         )
     if selection_values["Sub-Commodity"] != "All":
         filtered_df = filtered_df[
-            filtered_df[subcommodity_col] == selection_values["Sub-Commodity"]
+            filtered_df[subcommodity_col].astype(str)
+            == selection_values["Sub-Commodity"]
         ]
 
     detail_options = ["All"] + sorted(
-        filtered_df[detail_col].dropna().unique().tolist()
+        filtered_df[detail_col].dropna().astype(str).unique().tolist()
     )
-    with sub_filter_cols[1]:
+    with filter_cols[2]:
         selection_values["Detailed Commodity"] = st.selectbox(
             "Detailed Commodity",
             options=detail_options,
@@ -122,10 +129,11 @@ def render_setup_screen(
         )
     if selection_values["Detailed Commodity"] != "All":
         filtered_df = filtered_df[
-            filtered_df[detail_col] == selection_values["Detailed Commodity"]
+            filtered_df[detail_col].astype(str)
+            == selection_values["Detailed Commodity"]
         ]
 
-    st.metric("Rows after filtering", len(filtered_df))
+    st.metric("Parts after filtering", len(filtered_df))
     st.markdown("</div>", unsafe_allow_html=True)
 
     if filtered_df.empty:
@@ -133,7 +141,10 @@ def render_setup_screen(
         return
 
     st.markdown("<div class='material-card'>", unsafe_allow_html=True)
-    st.markdown("<div class='material-header'>2. Choose clustering attributes</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='material-header'>Select clustering attributes</div>",
+        unsafe_allow_html=True,
+    )
     st.markdown(
         "<div class='material-subtitle'>Select the features to feed the clustering model. Attributes without data can be hidden from the table.</div>",
         unsafe_allow_html=True,
@@ -157,21 +168,57 @@ def render_setup_screen(
         filtered_df.shape,
     )
 
-    attribute_config = prepare_attribute_config(filtered_df, excluded_columns, signature)
+    previous_signature = st.session_state.get("attribute_signature")
+    attribute_config = prepare_attribute_config(
+        filtered_df, excluded_columns, signature
+    )
 
-    if hide_empty_attributes and attribute_config is not None and not attribute_config.empty:
+    if previous_signature != signature:
+        st.session_state.attribute_selection_confirmed = False
+
+    if (
+        hide_empty_attributes
+        and attribute_config is not None
+        and not attribute_config.empty
+    ):
         attribute_config = attribute_config[attribute_config["Fill Ratio"] > 0]
 
+    if attribute_config is None or attribute_config.empty:
+        st.info("No eligible attributes were found. Adjust your filters and try again.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    previous_threshold = st.session_state.get("attribute_selection_threshold", 70)
     min_fill_ratio = st.slider(
         "Minimum fill ratio required for clustering",
         min_value=0,
         max_value=100,
-        value=70,
+        value=int(previous_threshold),
         step=5,
     )
+    if min_fill_ratio != previous_threshold:
+        st.session_state.attribute_selection_threshold = min_fill_ratio
+        st.session_state.attribute_selection_confirmed = False
+    else:
+        st.session_state.attribute_selection_threshold = min_fill_ratio
+
+    visible_attributes = attribute_config[
+        attribute_config["Fill Ratio"] >= min_fill_ratio
+    ].copy()
+
+    if visible_attributes.empty:
+        st.info(
+            "No attributes meet the minimum fill ratio. Lower the threshold or adjust filters."
+        )
+        st.session_state.attribute_selection_confirmed = False
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    visible_attributes.reset_index(drop=True, inplace=True)
+    visible_attributes.index = visible_attributes.index + 1
 
     attribute_editor = st.data_editor(
-        attribute_config,
+        visible_attributes,
         key="attribute_editor",
         use_container_width=True,
         num_rows="fixed",
@@ -200,20 +247,53 @@ def render_setup_screen(
         disabled=["Attribute", "Fill Ratio"],
     )
 
-    st.session_state.attribute_config = attribute_editor.copy()
+    attribute_editor = attribute_editor.reset_index(drop=True)
+    updated_config = attribute_config.set_index("Attribute")
+    editor_updates = attribute_editor.set_index("Attribute")
+    updated_config.loc[
+        editor_updates.index, ["Include", "Type", "Unit Extraction"]
+    ] = editor_updates[["Include", "Type", "Unit Extraction"]]
+    updated_config = updated_config.reset_index()
+    st.session_state.attribute_config = updated_config
 
-    selected_attributes_df = attribute_editor[
-        (attribute_editor["Include"]) & (attribute_editor["Fill Ratio"] >= min_fill_ratio)
+    selected_attributes_df = updated_config[
+        (updated_config["Include"]) & (updated_config["Fill Ratio"] >= min_fill_ratio)
     ]
+
+    action_cols = st.columns([1, 1.2])
+    with action_cols[0]:
+        finalize_clicked = st.button(
+            "Finalize attribute selection",
+            use_container_width=True,
+        )
+    if finalize_clicked:
+        if selected_attributes_df.empty:
+            st.warning(
+                "Select at least one attribute above the minimum fill ratio before finalizing."
+            )
+        else:
+            st.session_state.attribute_selection_confirmed = True
+
+    if (
+        st.session_state.attribute_selection_confirmed
+        and selected_attributes_df.empty
+    ):
+        st.session_state.attribute_selection_confirmed = False
+
+    if st.session_state.attribute_selection_confirmed:
+        st.success("Attribute selection confirmed. You can configure clustering below.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    if selected_attributes_df.empty:
-        st.info("Select at least one attribute with sufficient fill ratio to continue.")
+    if not st.session_state.attribute_selection_confirmed:
+        st.info("Finalize the attribute selection to configure clustering parameters.")
         return
 
     st.markdown("<div class='material-card'>", unsafe_allow_html=True)
-    st.markdown("<div class='material-header'>3. Configure clustering</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='material-header'>Configure clustering</div>",
+        unsafe_allow_html=True,
+    )
     st.markdown(
         "<div class='material-subtitle'>Fine-tune DBSCAN parameters. The app will suggest a metric and epsilon value automatically.</div>",
         unsafe_allow_html=True,
@@ -265,49 +345,27 @@ def render_setup_screen(
             if recommended_metric in available_metrics
             else 0,
         )
+        manual_eps = st.slider(
+            "Manual epsilon adjustment",
+            min_value=0.01,
+            max_value=5.0,
+            value=0.5,
+            step=0.01,
+            help="Provides a hint when overriding the automatically recommended eps value.",
+        )
     else:
         eps_min = eps_max = eps_step = None
         min_samples_value = None
-        numeric_weight = st.slider(
-            "Weight applied to numeric attributes",
-            min_value=1.0,
-            max_value=25.0,
-            value=10.0,
-            step=1.0,
-        )
-        metric = st.selectbox(
-            "Distance metric",
-            options=available_metrics,
-            index=available_metrics.index(recommended_metric)
-            if recommended_metric in available_metrics
-            else 0,
-            help="The app will automatically refine eps based on the chosen metric.",
+        numeric_weight = 10.0
+        metric = recommended_metric
+        manual_eps = None
+        st.caption(
+            f"Automatic configuration will use the recommended `{recommended_metric}` distance metric and a numeric weight of 10."
         )
 
-    manual_eps = st.slider(
-        "Manual epsilon adjustment",
-        min_value=0.01,
-        max_value=5.0,
-        value=0.5,
-        step=0.01,
-        help="Provides a hint when the app automatically recommends eps values.",
-    )
+    run_button = st.button("Run clustering", use_container_width=True)
 
-    min_fill_ratio_value = min_fill_ratio
-
-    run_button_cols = st.columns([1, 1])
-    with run_button_cols[0]:
-        trigger_run = st.button("Run clustering", use_container_width=True)
-    with run_button_cols[1]:
-        reset_clicked = st.button(
-            "Reset configuration", use_container_width=True, type="secondary"
-        )
-
-    if reset_clicked:
-        reset_app_state()
-        st.rerun()
-
-    if trigger_run:
+    if run_button:
         run_config = RunConfig(
             dataset_name=dataset_name,
             filters=selection_values,
@@ -324,7 +382,7 @@ def render_setup_screen(
             numeric_weight=numeric_weight,
             metric=metric,
             manual_eps=manual_eps,
-            min_fill_ratio=min_fill_ratio_value,
+            min_fill_ratio=min_fill_ratio,
         )
         trigger_clustering_run(run_config)
 

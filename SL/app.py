@@ -28,13 +28,29 @@ SCREEN_TITLES = {
 }
 
 
-DATASET_OPTIONS = ["A", "B", "C"]
+DATASET_ALIASES = {
+    "Airflow": "Airflow",
+    "Bearings": "Bearings",
+    "Capacitors": "Capacitors",
+    "Compressors": "Compressors",
+    "Drives": "Drives",
+    "Electric_Motors": "Electric Motors",
+    "Fasteners_Hardware_Fittings": "Fasteners Hardware & Fittings",
+    "Foams_Fiberglass": "Foams & Fiberglass",
+    "Pulleys_Tensioners": "Pulleys Tensioners",
+    "Pumps": "Pumps",
+    "Valves": "Valves",
+}
 
 
 def ensure_attribute_state() -> None:
     if "attribute_config" not in st.session_state:
         st.session_state.attribute_config = None
         st.session_state.attribute_signature = None
+    if "attribute_selection_confirmed" not in st.session_state:
+        st.session_state.attribute_selection_confirmed = False
+    if "attribute_selection_threshold" not in st.session_state:
+        st.session_state.attribute_selection_threshold = 70
 
 
 def render_navigation() -> None:
@@ -67,7 +83,12 @@ def render_by_part(_: str, __: list[str], ___) -> None:
     st.info("The By Part configuration will be available soon.")
 
 
-def render_by_commodity(dataset_name: str, dataset_options: list[str], consolidated_df) -> None:
+def render_by_commodity(
+    dataset_name: str,
+    dataset_options: list[str],
+    dataset_aliases: dict[str, str],
+    consolidated_df,
+) -> None:
     initialize_app_state()
 
     if st.session_state.screen == "loading":
@@ -77,7 +98,9 @@ def render_by_commodity(dataset_name: str, dataset_options: list[str], consolida
     render_navigation()
 
     if st.session_state.screen == "setup":
-        render_setup_screen(consolidated_df, dataset_name, dataset_options)
+        render_setup_screen(
+            consolidated_df, dataset_name, dataset_options, dataset_aliases
+        )
     elif st.session_state.screen == "results":
         render_results_screen()
     elif st.session_state.screen == "cluster_detail":
@@ -95,7 +118,7 @@ def main() -> None:
 
     ensure_attribute_state()
 
-    dataset_options = DATASET_OPTIONS
+    dataset_options = list(DATASET_ALIASES.keys())
 
     if not dataset_options:
         st.error("No datasets are configured for the Commodity selection.")
@@ -119,7 +142,12 @@ def main() -> None:
     )
 
     if view_mode == "By Commodity":
-        render_by_commodity(active_dataset, dataset_options, consolidated_df)
+        render_by_commodity(
+            active_dataset,
+            dataset_options,
+            DATASET_ALIASES,
+            consolidated_df,
+        )
     else:
         render_by_part(active_dataset, dataset_options, consolidated_df)
 

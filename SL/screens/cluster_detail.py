@@ -42,7 +42,10 @@ def render_cluster_detail_screen() -> None:
         f"<div class='material-header'>Cluster {cluster_label} overview</div>",
         unsafe_allow_html=True,
     )
-    st.caption(f"Dataset: {result.config.dataset_name}")
+    dataset_label = result.config.filters.get(
+        "Commodity", result.config.dataset_name
+    )
+    st.caption(f"Dataset: {dataset_label}")
 
     overview_columns = st.columns(3)
     with overview_columns[0]:

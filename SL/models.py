@@ -27,7 +27,7 @@ class RunConfig:
     min_samples: int | None
     numeric_weight: float
     metric: str
-    manual_eps: float
+    manual_eps: float | None
     min_fill_ratio: int
 
 

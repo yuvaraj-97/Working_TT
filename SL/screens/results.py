@@ -19,7 +19,10 @@ def render_results_screen() -> None:
 
     st.markdown("<div class='material-card'>", unsafe_allow_html=True)
     st.markdown("<div class='material-header'>Run summary</div>", unsafe_allow_html=True)
-    st.caption(f"Dataset: {result.config.dataset_name}")
+    dataset_label = result.config.filters.get(
+        "Commodity", result.config.dataset_name
+    )
+    st.caption(f"Dataset: {dataset_label}")
     summary_cols = st.columns(3)
     with summary_cols[0]:
         st.metric("Clusters", int(result.cluster_summary.shape[0]))
@@ -105,7 +108,30 @@ def render_results_screen() -> None:
         "<div class='material-header'>Candidate evaluation</div>",
         unsafe_allow_html=True,
     )
-    st.dataframe(result.candidate_df, use_container_width=True)
+    st.dataframe(
+        result.candidate_df,
+        use_container_width=True,
+        column_config={
+            "eps": st.column_config.NumberColumn("Eps", format="%.3f"),
+            "silhouette_score": st.column_config.NumberColumn(
+                "Silhouette", format="%.3f"
+            ),
+            "num_clusters": st.column_config.NumberColumn("Clusters", format="%d"),
+            "num_noise_points": st.column_config.NumberColumn(
+                "Noise points", format="%d"
+            ),
+            "proportion_noise": st.column_config.NumberColumn(
+                "Noise proportion", format="%.2f"
+            ),
+            "mean_cluster_likeness": st.column_config.NumberColumn(
+                "Mean likeness", format="%.3f"
+            ),
+            "Score": st.column_config.NumberColumn("Score", format="%.3f"),
+            "Recommended": st.column_config.CheckboxColumn(
+                "Recommended", disabled=True
+            ),
+        },
+    )
     st.markdown("</div>", unsafe_allow_html=True)
 
     excel_bytes, pdf_bytes = build_downloads(result)
