@@ -8,6 +8,7 @@ import streamlit as st
 
 from models import RunResult
 from state import navigate_to
+from ui.components import material_card
 
 
 def render_cluster_detail_screen() -> None:
@@ -45,38 +46,28 @@ def render_cluster_detail_screen() -> None:
         cluster_number = int(cluster_id) + 1
         cluster_heading = f"Cluster {cluster_number} overview"
 
-    st.markdown("<div class='material-card'>", unsafe_allow_html=True)
-    st.markdown(
-        f"<div class='material-header'>{cluster_heading}</div>",
-        unsafe_allow_html=True,
-    )
     dataset_label = result.config.filters.get(
         "Commodity", result.config.dataset_name
     )
-    st.caption(f"Dataset: {dataset_label}")
 
-    overview_columns = st.columns(3)
-    with overview_columns[0]:
-        st.metric("Parts", int(summary_row["cluster_size"]))
-    with overview_columns[1]:
-        st.metric("Mean likeness", f"{summary_row['mean_likeness']:.2f}")
-    with overview_columns[2]:
-        st.metric("Metric", result.metric)
+    with material_card(cluster_heading) as card:
+        card.caption(f"Dataset: {dataset_label}")
 
-    representatives = result.roster_parts.get(int(cluster_id), [])
-    if representatives:
-        st.caption("Representative parts: " + ", ".join(representatives))
+        overview_columns = card.columns(3)
+        with overview_columns[0]:
+            st.metric("Parts", int(summary_row["cluster_size"]))
+        with overview_columns[1]:
+            st.metric("Mean likeness", f"{summary_row['mean_likeness']:.2f}")
+        with overview_columns[2]:
+            st.metric("Metric", result.metric)
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        representatives = result.roster_parts.get(int(cluster_id), [])
+        if representatives:
+            card.caption("Representative parts: " + ", ".join(representatives))
 
     cluster_parts = result.grouped_df[result.grouped_df["cluster"] == cluster_id]
-    st.markdown("<div class='material-card'>", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='material-header'>Cluster members</div>",
-        unsafe_allow_html=True,
-    )
-    st.dataframe(cluster_parts, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    with material_card("Cluster members") as card:
+        card.dataframe(cluster_parts, use_container_width=True)
 
     feature_matrix = (
         result.cat_vectors
@@ -89,44 +80,53 @@ def render_cluster_detail_screen() -> None:
         result.result_df.loc[cluster_mask, result.part_number_col].astype(str)
     )
 
-    st.markdown("<div class='material-card'>", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='material-header'>Similarity diagnostics</div>",
-        unsafe_allow_html=True,
+    toggle_key = f"show_similarity_{cluster_id}"
+    show_similarity = st.toggle(
+        "Show similarity diagnostics",
+        value=False,
+        key=toggle_key,
+        help="Display the similarity heatmap for the current cluster.",
     )
 
-    if cluster_vectors.shape[0] > 1:
-        from sklearn.metrics import pairwise_distances
+    if show_similarity:
+        with material_card("Similarity diagnostics") as card:
+            if cluster_vectors.shape[0] > 1:
+                from sklearn.metrics import pairwise_distances
 
-        distances = pairwise_distances(
-            cluster_vectors,
-            metric=result.metric
-            if result.metric != "jaccard" or result.cat_vectors is not None
-            else "euclidean",
-        )
-        similarity = 1.0 / (1.0 + distances)
-        heatmap_df = pd.DataFrame(
-            similarity,
-            index=cluster_parts_labels,
-            columns=cluster_parts_labels,
-        ).reset_index(names=result.part_number_col)
-        heatmap_long = heatmap_df.melt(
-            id_vars=result.part_number_col,
-            var_name="Peer",
-            value_name="Similarity",
-        )
-        heatmap_chart = (
-            alt.Chart(heatmap_long)
-            .mark_rect()
-            .encode(
-                x=alt.X("Peer:N", title="Peer part"),
-                y=alt.Y(f"{result.part_number_col}:N", title="Part"),
-                color=alt.Color("Similarity:Q", scale=alt.Scale(scheme="blues")),
-                tooltip=[result.part_number_col, "Peer", "Similarity"],
-            )
-        )
-        st.altair_chart(heatmap_chart, use_container_width=True)
+                distances = pairwise_distances(
+                    cluster_vectors,
+                    metric=
+                    result.metric
+                    if result.metric != "jaccard" or result.cat_vectors is not None
+                    else "euclidean",
+                )
+                similarity = 1.0 / (1.0 + distances)
+                heatmap_df = pd.DataFrame(
+                    similarity,
+                    index=cluster_parts_labels,
+                    columns=cluster_parts_labels,
+                ).reset_index(names=result.part_number_col)
+                heatmap_long = heatmap_df.melt(
+                    id_vars=result.part_number_col,
+                    var_name="Peer",
+                    value_name="Similarity",
+                )
+                heatmap_chart = (
+                    alt.Chart(heatmap_long)
+                    .mark_rect()
+                    .encode(
+                        x=alt.X("Peer:N", title="Peer part"),
+                        y=alt.Y(f"{result.part_number_col}:N", title="Part"),
+                        color=alt.Color(
+                            "Similarity:Q", scale=alt.Scale(scheme="blues")
+                        ),
+                        tooltip=[result.part_number_col, "Peer", "Similarity"],
+                    )
+                )
+                card.altair_chart(heatmap_chart, use_container_width=True)
+            else:
+                card.info(
+                    "Not enough parts in this cluster to produce similarity diagnostics."
+                )
     else:
-        st.info("Not enough parts in this cluster to produce similarity diagnostics.")
-
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.caption("Enable the toggle to explore similarity diagnostics.")
