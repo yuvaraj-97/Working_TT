@@ -54,12 +54,9 @@ def render_cluster_detail_screen() -> None:
         card.caption(f"Dataset: {dataset_label}")
 
         overview_columns = card.columns(3)
-        with overview_columns[0]:
-            st.metric("Parts", int(summary_row["cluster_size"]))
-        with overview_columns[1]:
-            st.metric("Mean likeness", f"{summary_row['mean_likeness']:.2f}")
-        with overview_columns[2]:
-            st.metric("Metric", result.metric)
+        overview_columns[0].metric("Parts", int(summary_row["cluster_size"]))
+        overview_columns[1].metric("Mean likeness", f"{summary_row['mean_likeness']:.2f}")
+        overview_columns[2].metric("Metric", result.metric)
 
         representatives = result.roster_parts.get(int(cluster_id), [])
         if representatives:
@@ -81,15 +78,15 @@ def render_cluster_detail_screen() -> None:
     )
 
     toggle_key = f"show_similarity_{cluster_id}"
-    show_similarity = st.toggle(
-        "Show similarity diagnostics",
-        value=False,
-        key=toggle_key,
-        help="Display the similarity heatmap for the current cluster.",
-    )
+    with material_card("Similarity diagnostics") as card:
+        show_similarity = card.toggle(
+            "Show similarity diagnostics",
+            value=False,
+            key=toggle_key,
+            help="Display the similarity heatmap for the current cluster.",
+        )
 
-    if show_similarity:
-        with material_card("Similarity diagnostics") as card:
+        if show_similarity:
             if cluster_vectors.shape[0] > 1:
                 from sklearn.metrics import pairwise_distances
 
@@ -128,5 +125,5 @@ def render_cluster_detail_screen() -> None:
                 card.info(
                     "Not enough parts in this cluster to produce similarity diagnostics."
                 )
-    else:
-        st.caption("Enable the toggle to explore similarity diagnostics.")
+        else:
+            card.caption("Enable the toggle to explore similarity diagnostics.")

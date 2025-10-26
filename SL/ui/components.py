@@ -19,21 +19,23 @@ def material_card(title: str | None = None, subtitle: str | None = None):
         Optional subtitle rendered below the title.
     """
 
-    card = st.container()
-    with card:
-        card.markdown("<div class='material-card'>", unsafe_allow_html=True)
+    outer = st.container()
+    with outer:
+        st.markdown("<div class='material-card'>", unsafe_allow_html=True)
         if title:
-            card.markdown(
+            st.markdown(
                 f"<div class='material-header'>{title}</div>",
                 unsafe_allow_html=True,
             )
         if subtitle:
-            card.markdown(
+            st.markdown(
                 f"<div class='material-subtitle'>{subtitle}</div>",
                 unsafe_allow_html=True,
             )
-        yield card
-        card.markdown("</div>", unsafe_allow_html=True)
+        body = st.container()
+        with body:
+            yield body
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 __all__ = ["material_card"]

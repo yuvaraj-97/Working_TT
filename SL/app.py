@@ -104,12 +104,6 @@ def render_by_commodity(
     dataset_aliases: dict[str, str],
     consolidated_df,
 ) -> None:
-    initialize_app_state()
-
-    if st.session_state.screen == "loading":
-        execute_pending_run(consolidated_df)
-        return
-
     render_navigation()
 
     if st.session_state.screen == "setup":
@@ -126,11 +120,7 @@ def render_by_commodity(
 
 def main() -> None:
     configure_page()
-    st.title("Clustering Workbench")
-    st.caption(
-        "Interactive workflow for preparing clustering inputs using the pre-loaded Dataiku dataset."
-    )
-
+    initialize_app_state()
     ensure_attribute_state()
 
     dataset_options = list(DATASET_ALIASES.keys())
@@ -149,6 +139,15 @@ def main() -> None:
     except RuntimeError as exc:
         st.error(str(exc))
         st.stop()
+
+    if st.session_state.screen == "loading":
+        execute_pending_run(consolidated_df)
+        return
+
+    st.title("Clustering Workbench")
+    st.caption(
+        "Interactive workflow for preparing clustering inputs using the pre-loaded Dataiku dataset."
+    )
 
     view_mode = st.radio(
         "Configuration mode",
