@@ -62,18 +62,34 @@ def configure_page() -> None:
                 gap: 1rem;
             }}
             .cluster-card {{
+                position: relative;
                 border-radius: 18px;
-                border: 1px solid rgba(140, 140, 152, 0.55);
                 padding: 1.35rem;
                 background: rgba(19, 20, 30, 0.82);
                 box-shadow: 0 18px 36px rgba(0, 0, 0, 0.35);
                 height: 100%;
-                transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+                overflow: hidden;
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+            }}
+            .cluster-card::before {{
+                content: "";
+                position: absolute;
+                inset: 0;
+                border-radius: inherit;
+                padding: 1px;
+                background: linear-gradient(140deg, rgba(210, 214, 255, 0.85), rgba(112, 122, 210, 0.35));
+                -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+                -webkit-mask-composite: xor;
+                mask-composite: exclude;
+                pointer-events: none;
+                transition: opacity 0.2s ease, background 0.2s ease;
             }}
             .cluster-card:hover {{
                 transform: translateY(-2px);
-                border-color: rgba(192, 192, 204, 0.85);
                 box-shadow: 0 22px 44px rgba(0, 0, 0, 0.45);
+            }}
+            .cluster-card:hover::before {{
+                background: linear-gradient(140deg, rgba(235, 238, 255, 0.95), rgba(146, 156, 230, 0.55));
             }}
             .cluster-card h4 {{
                 margin: 0;

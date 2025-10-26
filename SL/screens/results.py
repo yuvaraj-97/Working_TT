@@ -73,7 +73,7 @@ def render_results_screen() -> None:
                         help="View cluster details",
                     ):
                         st.session_state.selected_cluster = cluster_id
-                        st.session_state.navigation_menu = "Cluster Detail"
+                        st.session_state.pending_navigation_target = "Cluster Detail"
                         navigate_to("cluster_detail")
                 metric_cols = st.columns(2)
                 with metric_cols[0]:

@@ -29,7 +29,7 @@ def render_cluster_detail_screen() -> None:
         return
 
     def _go_back_to_results() -> None:
-        st.session_state.navigation_menu = "Results"
+        st.session_state.pending_navigation_target = "Results"
         navigate_to("results")
 
     st.button(
