@@ -8,7 +8,11 @@ import streamlit as st
 
 
 @contextmanager
-def material_card(title: str | None = None, subtitle: str | None = None):
+def material_card(
+    title: str | None = None,
+    subtitle: str | None = None,
+    card_class: str = "material-card",  # <-- ADD THIS ARGUMENT
+):
     """Render content inside a styled material card container.
 
     Parameters
@@ -17,25 +21,26 @@ def material_card(title: str | None = None, subtitle: str | None = None):
         Optional title rendered using the ``material-header`` class.
     subtitle:
         Optional subtitle rendered below the title.
+    card_class:  # <-- ADD THIS DOCSTRING
+        The CSS class to apply (e.g., 'material-card' or 'cluster-card').
     """
 
-    outer = st.container()
-    with outer:
-        st.markdown("<div class='material-card'>", unsafe_allow_html=True)
+    card = st.container()
+    with card:
+        # Use the new 'card_class' variable here
+        card.markdown(f"<div class='{card_class}'>", unsafe_allow_html=True)
         if title:
-            st.markdown(
+            card.markdown(
                 f"<div class='material-header'>{title}</div>",
                 unsafe_allow_html=True,
             )
         if subtitle:
-            st.markdown(
+            card.markdown(
                 f"<div class='material-subtitle'>{subtitle}</div>",
                 unsafe_allow_html=True,
             )
-        body = st.container()
-        with body:
-            yield body
-        st.markdown("</div>", unsafe_allow_html=True)
+        yield card
+        card.markdown("</div>", unsafe_allow_html=True)
 
 
 __all__ = ["material_card"]
