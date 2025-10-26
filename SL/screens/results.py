@@ -51,25 +51,30 @@ def render_results_screen() -> None:
                 cluster_columns = st.columns(3, gap="large")
             column = cluster_columns[index % 3]
             cluster_id = int(cluster_row["cluster"])
-            cluster_label = cluster_id + 1
+            if cluster_id < 0:
+                cluster_heading = "Noise"
+                cluster_label = None
+            else:
+                cluster_label = cluster_id + 1
+                cluster_heading = f"Cluster {cluster_label}"
             with column:
                 st.markdown("<div class='cluster-card'>", unsafe_allow_html=True)
                 header_cols = st.columns([3, 1])
                 with header_cols[0]:
                     st.markdown(
-                        f"<div class='material-header'>Cluster {cluster_label}</div>",
+                        f"<div class='material-header'>{cluster_heading}</div>",
                         unsafe_allow_html=True,
                     )
                 with header_cols[1]:
                     if st.button(
-                        "🔍",
+                        "View",
                         key=f"cluster_card_{cluster_id}",
                         type="secondary",
                         help="View cluster details",
                     ):
                         st.session_state.selected_cluster = cluster_id
+                        st.session_state.navigation_menu = "Cluster Detail"
                         navigate_to("cluster_detail")
-                        st.rerun()
                 metric_cols = st.columns(2)
                 with metric_cols[0]:
                     st.metric("Size", int(cluster_row["cluster_size"]))
@@ -91,11 +96,18 @@ def render_results_screen() -> None:
             "<div class='material-header'>Cluster metrics</div>",
             unsafe_allow_html=True,
         )
+        cluster_metrics_display = result.cluster_summary.copy()
+        cluster_metrics_display["Cluster"] = cluster_metrics_display["cluster"].apply(
+            lambda value: "Noise" if int(value) < 0 else str(int(value) + 1)
+        )
+        cluster_metrics_display = cluster_metrics_display[
+            ["Cluster", "cluster_size", "mean_likeness"]
+        ]
         st.dataframe(
-            result.cluster_summary,
+            cluster_metrics_display,
             use_container_width=True,
             column_config={
-                "cluster": st.column_config.NumberColumn("Cluster"),
+                "Cluster": st.column_config.Column("Cluster"),
                 "cluster_size": st.column_config.NumberColumn("Size", format="%d"),
                 "mean_likeness": st.column_config.NumberColumn(
                     "Mean likeness", format="%.3f"
