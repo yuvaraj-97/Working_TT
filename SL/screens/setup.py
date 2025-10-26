@@ -92,9 +92,6 @@ def render_setup_screen(
         st.rerun()
 
     selection_values["Commodity"] = chosen_alias
-    st.caption(
-        f"Using `{chosen_alias}` commodity dataset from the StreamLit flow zone."
-    )
 
     if commodity_col in filtered_df.columns:
         filtered_df = filtered_df[
@@ -150,14 +147,13 @@ def render_setup_screen(
         unsafe_allow_html=True,
     )
 
-    st.caption(f"Using `{part_number_col}` as the unique part identifier.")
-
     excluded_columns = (commodity_col, subcommodity_col, detail_col, part_number_col)
 
     hide_empty_attributes = st.toggle(
         "Hide attributes with no values",
         value=True,
         help="Only keep columns with data in the table.",
+        key="hide_empty_attributes_toggle",
     )
 
     signature = (
@@ -176,15 +172,17 @@ def render_setup_screen(
     if previous_signature != signature:
         st.session_state.attribute_selection_confirmed = False
 
+    display_config = attribute_config
     if (
         hide_empty_attributes
-        and attribute_config is not None
-        and not attribute_config.empty
+        and display_config is not None
+        and not display_config.empty
     ):
-        attribute_config = attribute_config[attribute_config["Fill Ratio"] > 0]
+        display_config = display_config[display_config["Fill Ratio"] > 0].copy()
 
-    if attribute_config is None or attribute_config.empty:
+    if display_config is None or display_config.empty:
         st.info("No eligible attributes were found. Adjust your filters and try again.")
+        st.session_state.attribute_selection_confirmed = False
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
@@ -195,6 +193,7 @@ def render_setup_screen(
         max_value=100,
         value=int(previous_threshold),
         step=5,
+        key="min_fill_ratio_slider",
     )
     if min_fill_ratio != previous_threshold:
         st.session_state.attribute_selection_threshold = min_fill_ratio
@@ -202,107 +201,171 @@ def render_setup_screen(
     else:
         st.session_state.attribute_selection_threshold = min_fill_ratio
 
-    visible_attributes = attribute_config[
-        attribute_config["Fill Ratio"] >= min_fill_ratio
-    ].copy()
+    configured_attributes = st.session_state.get("attribute_config")
+    if configured_attributes is None and attribute_config is not None:
+        configured_attributes = attribute_config.copy()
 
-    if visible_attributes.empty:
-        st.info(
-            "No attributes meet the minimum fill ratio. Lower the threshold or adjust filters."
+    if not st.session_state.attribute_selection_confirmed:
+        visible_attributes = display_config[
+            display_config["Fill Ratio"] >= min_fill_ratio
+        ].copy()
+
+        if visible_attributes.empty:
+            st.info(
+                "No attributes meet the minimum fill ratio. Lower the threshold or adjust filters."
+            )
+            st.session_state.attribute_selection_confirmed = False
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
+        visible_attributes = visible_attributes.reset_index(drop=True)
+
+        attribute_editor = st.data_editor(
+            visible_attributes,
+            key="attribute_editor",
+            use_container_width=True,
+            hide_index=True,
+            num_rows="fixed",
+            column_config={
+                "Include": st.column_config.CheckboxColumn(
+                    "Include",
+                    help="Select to send attribute to the clustering model.",
+                ),
+                "Type": st.column_config.SelectboxColumn(
+                    "Type",
+                    options=["Numerical", "Categorical", "Alpha Numeric", "Text"],
+                ),
+                "Unit Extraction": st.column_config.SelectboxColumn(
+                    "Unit Extraction",
+                    options=["Yes", "No"],
+                    help="If Yes, the app will extract the first numeric value inside the field.",
+                ),
+                "Fill Ratio": st.column_config.ProgressColumn(
+                    "Fill Ratio",
+                    help="Share of non-null values in the filtered data",
+                    min_value=0.0,
+                    max_value=100.0,
+                    format="{:.0f}%",
+                ),
+            },
+            disabled=["Attribute", "Fill Ratio"],
         )
-        st.session_state.attribute_selection_confirmed = False
-        st.markdown("</div>", unsafe_allow_html=True)
-        return
 
-    visible_attributes = visible_attributes.reset_index(drop=True)
+        attribute_editor = attribute_editor.reset_index(drop=True)
+        base_config = (
+            configured_attributes.copy()
+            if configured_attributes is not None
+            else attribute_config.copy()
+        )
+        updated_config = attribute_config.set_index("Attribute")
+        editor_updates = attribute_editor.set_index("Attribute")
+        updated_config.loc[
+            editor_updates.index, ["Include", "Type", "Unit Extraction"]
+        ] = editor_updates[["Include", "Type", "Unit Extraction"]]
+        updated_config = updated_config.reset_index()
+        st.session_state.attribute_config = updated_config
 
-    attribute_editor = st.data_editor(
-        visible_attributes,
-        key="attribute_editor",
-        use_container_width=True,
-        hide_index=True,
-        num_rows="fixed",
-        column_config={
-            "Include": st.column_config.CheckboxColumn(
+        if base_config is None:
+            previous_subset = updated_config.set_index("Attribute")[[
                 "Include",
-                help="Select to send attribute to the clustering model.",
-            ),
-            "Type": st.column_config.SelectboxColumn(
                 "Type",
-                options=["Numerical", "Categorical", "Alpha Numeric", "Text"],
-            ),
-            "Unit Extraction": st.column_config.SelectboxColumn(
                 "Unit Extraction",
-                options=["Yes", "No"],
-                help="If Yes, the app will extract the first numeric value inside the field.",
-            ),
-            "Fill Ratio": st.column_config.ProgressColumn(
-                "Fill Ratio",
-                help="Share of non-null values in the filtered data",
-                min_value=0.0,
-                max_value=100.0,
-                format="{:.0f}%",
-            ),
-        },
-        disabled=["Attribute", "Fill Ratio"],
-    )
+            ]].sort_index()
+        else:
+            previous_subset = base_config.set_index("Attribute")[[
+                "Include",
+                "Type",
+                "Unit Extraction",
+            ]].sort_index()
+        new_subset = updated_config.set_index("Attribute")[[
+            "Include",
+            "Type",
+            "Unit Extraction",
+        ]].sort_index()
+        if not new_subset.equals(previous_subset):
+            st.session_state.attribute_selection_confirmed = False
 
-    attribute_editor = attribute_editor.reset_index(drop=True)
-    previous_config = st.session_state.get("attribute_config")
-    if previous_config is None:
-        previous_config = attribute_config.copy()
-    else:
-        previous_config = previous_config.copy()
-    updated_config = attribute_config.set_index("Attribute")
-    editor_updates = attribute_editor.set_index("Attribute")
-    updated_config.loc[
-        editor_updates.index, ["Include", "Type", "Unit Extraction"]
-    ] = editor_updates[["Include", "Type", "Unit Extraction"]]
-    updated_config = updated_config.reset_index()
-    st.session_state.attribute_config = updated_config
+        selected_attributes_df = updated_config[
+            (updated_config["Include"])
+            & (updated_config["Fill Ratio"] >= min_fill_ratio)
+        ]
 
-    previous_subset = previous_config.set_index("Attribute")[[
-        "Include",
-        "Type",
-        "Unit Extraction",
-    ]].sort_index()
-    new_subset = updated_config.set_index("Attribute")[[
-        "Include",
-        "Type",
-        "Unit Extraction",
-    ]].sort_index()
-    if not new_subset.equals(previous_subset):
-        st.session_state.attribute_selection_confirmed = False
+        finalize_clicked = st.button(
+            "Finalize attribute selection",
+            key="finalize_attribute_selection",
+            type="secondary",
+        )
+        if finalize_clicked:
+            if selected_attributes_df.empty:
+                st.warning(
+                    "Select at least one attribute above the minimum fill ratio before finalizing."
+                )
+            else:
+                st.session_state.attribute_selection_confirmed = True
 
-    selected_attributes_df = updated_config[
-        (updated_config["Include"]) & (updated_config["Fill Ratio"] >= min_fill_ratio)
-    ]
+        if (
+            st.session_state.attribute_selection_confirmed
+            and selected_attributes_df.empty
+        ):
+            st.session_state.attribute_selection_confirmed = False
 
-    finalize_clicked = st.button(
-        "Finalize attribute selection",
-        key="finalize_attribute_selection",
-        type="secondary",
-    )
-    if finalize_clicked:
-        if selected_attributes_df.empty:
-            st.warning(
-                "Select at least one attribute above the minimum fill ratio before finalizing."
+        if st.session_state.attribute_selection_confirmed:
+            st.success(
+                "Attribute selection confirmed. You can configure clustering below."
             )
         else:
-            st.session_state.attribute_selection_confirmed = True
+            st.markdown("</div>", unsafe_allow_html=True)
+            st.info(
+                "Finalize the attribute selection to configure clustering parameters."
+            )
+            return
+    else:
+        configured_attributes = st.session_state.get("attribute_config")
+        if configured_attributes is None:
+            configured_attributes = attribute_config.copy()
 
-    if (
-        st.session_state.attribute_selection_confirmed
-        and selected_attributes_df.empty
-    ):
-        st.session_state.attribute_selection_confirmed = False
+        selected_attributes_df = configured_attributes[
+            (configured_attributes["Include"])
+            & (configured_attributes["Fill Ratio"] >= min_fill_ratio)
+        ]
 
-    if st.session_state.attribute_selection_confirmed:
+        if selected_attributes_df.empty:
+            st.warning(
+                "No attributes remain selected. Click Edit attribute selection to make changes."
+            )
+            if st.button(
+                "Edit attribute selection", key="edit_attribute_selection_empty"
+            ):
+                st.session_state.attribute_selection_confirmed = False
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
         st.success("Attribute selection confirmed. You can configure clustering below.")
+        st.dataframe(
+            selected_attributes_df[
+                ["Attribute", "Type", "Unit Extraction", "Fill Ratio"]
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+        if st.button("Edit attribute selection", key="edit_attribute_selection"):
+            st.session_state.attribute_selection_confirmed = False
+            st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    if not st.session_state.attribute_selection_confirmed:
+    configured_attributes = st.session_state.get("attribute_config")
+    if configured_attributes is None:
+        st.info("Finalize the attribute selection to configure clustering parameters.")
+        return
+
+    selected_attributes_df = configured_attributes[
+        (configured_attributes["Include"])
+        & (configured_attributes["Fill Ratio"] >= min_fill_ratio)
+    ]
+
+    if selected_attributes_df.empty:
         st.info("Finalize the attribute selection to configure clustering parameters.")
         return
 
