@@ -28,18 +28,26 @@ def render_cluster_detail_screen() -> None:
         st.warning("The selected cluster is no longer available. Rerun clustering to refresh.")
         return
 
+    def _go_back_to_results() -> None:
+        st.session_state.navigation_menu = "Results"
+        navigate_to("results")
+
     st.button(
         "← Back to results",
-        on_click=lambda: navigate_to("results"),
+        on_click=_go_back_to_results,
         type="secondary",
     )
 
     summary_row = cluster_summary[cluster_summary["cluster"] == cluster_id].iloc[0]
-    cluster_label = int(cluster_id) + 1
+    if int(cluster_id) < 0:
+        cluster_heading = "Noise cluster overview"
+    else:
+        cluster_number = int(cluster_id) + 1
+        cluster_heading = f"Cluster {cluster_number} overview"
 
     st.markdown("<div class='material-card'>", unsafe_allow_html=True)
     st.markdown(
-        f"<div class='material-header'>Cluster {cluster_label} overview</div>",
+        f"<div class='material-header'>{cluster_heading}</div>",
         unsafe_allow_html=True,
     )
     dataset_label = result.config.filters.get(

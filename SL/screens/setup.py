@@ -290,35 +290,15 @@ def render_setup_screen(
             & (updated_config["Fill Ratio"] >= min_fill_ratio)
         ]
 
-        finalize_clicked = st.button(
-            "Finalize attribute selection",
-            key="finalize_attribute_selection",
-            type="secondary",
-        )
-        if finalize_clicked:
-            if selected_attributes_df.empty:
-                st.warning(
-                    "Select at least one attribute above the minimum fill ratio before finalizing."
-                )
-            else:
-                st.session_state.attribute_selection_confirmed = True
-
-        if (
-            st.session_state.attribute_selection_confirmed
-            and selected_attributes_df.empty
-        ):
-            st.session_state.attribute_selection_confirmed = False
-
-        if st.session_state.attribute_selection_confirmed:
-            st.success(
-                "Attribute selection confirmed. You can configure clustering below."
+        if selected_attributes_df.empty:
+            st.warning(
+                "Select at least one attribute above the minimum fill ratio to continue."
             )
-        else:
             st.markdown("</div>", unsafe_allow_html=True)
-            st.info(
-                "Finalize the attribute selection to configure clustering parameters."
-            )
             return
+
+        st.session_state.attribute_selection_confirmed = True
+        st.success("Attribute selection saved. Configure clustering below.")
     else:
         configured_attributes = st.session_state.get("attribute_config")
         if configured_attributes is None:
@@ -357,7 +337,7 @@ def render_setup_screen(
 
     configured_attributes = st.session_state.get("attribute_config")
     if configured_attributes is None:
-        st.info("Finalize the attribute selection to configure clustering parameters.")
+        st.info("Select at least one attribute above the minimum fill ratio to configure clustering parameters.")
         return
 
     selected_attributes_df = configured_attributes[
@@ -366,7 +346,9 @@ def render_setup_screen(
     ]
 
     if selected_attributes_df.empty:
-        st.info("Finalize the attribute selection to configure clustering parameters.")
+        st.info(
+            "Select at least one attribute above the minimum fill ratio to configure clustering parameters."
+        )
         return
 
     st.markdown("<div class='material-card'>", unsafe_allow_html=True)

@@ -62,12 +62,18 @@ def configure_page() -> None:
                 gap: 1rem;
             }}
             .cluster-card {{
-                border-radius: 16px;
-                border: none;
-                padding: 1.25rem;
-                background: rgba(17, 18, 26, 0.92);
-                box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+                border-radius: 18px;
+                border: 1px solid rgba(140, 140, 152, 0.55);
+                padding: 1.35rem;
+                background: rgba(19, 20, 30, 0.82);
+                box-shadow: 0 18px 36px rgba(0, 0, 0, 0.35);
                 height: 100%;
+                transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            }}
+            .cluster-card:hover {{
+                transform: translateY(-2px);
+                border-color: rgba(192, 192, 204, 0.85);
+                box-shadow: 0 22px 44px rgba(0, 0, 0, 0.45);
             }}
             .cluster-card h4 {{
                 margin: 0;
@@ -135,46 +141,34 @@ def configure_page() -> None:
             .stDataFrame tbody tr td {{
                 background-color: rgba(8, 10, 18, 0.6);
             }}
-            .loading-overlay {{
-                position: fixed;
-                inset: 0;
-                background: rgba(5, 5, 7, 0.94);
+            .loading-screen {{
+                min-height: 65vh;
                 display: flex;
-                align-items: center;
+                flex-direction: column;
                 justify-content: center;
-                z-index: 1000;
-                backdrop-filter: blur(12px);
-            }}
-            .loading-card {{
-                width: min(420px, 90vw);
-                padding: 2.5rem;
-                border-radius: 24px;
-                background: linear-gradient(150deg, rgba(10, 11, 18, 0.95), rgba(17, 18, 26, 0.95));
-                border: none;
-                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+                align-items: center;
+                gap: 1.5rem;
                 text-align: center;
+                padding: 2rem 1.5rem;
             }}
-            .loading-card .loading-title {{
+            .loading-status-title {{
                 font-size: 1.35rem;
                 font-weight: 600;
                 color: {TEXT_COLOR};
-                margin-bottom: 0.65rem;
             }}
-            .loading-card .loading-subtitle {{
+            .loading-status-subtitle {{
                 color: {SECONDARY_COLOR};
                 font-size: 0.95rem;
-                margin-bottom: 1.4rem;
             }}
-            .loading-card .loading-status {{
+            .loading-status {{
                 color: {TEXT_COLOR};
-                font-size: 0.95rem;
-                margin-bottom: 0.75rem;
+                font-size: 1rem;
             }}
-            .loading-overlay div[data-testid="stProgressBar"] > div {{
+            .loading-screen div[data-testid="stProgressBar"] > div {{
                 background-color: rgba(255, 255, 255, 0.12);
                 border-radius: 999px;
             }}
-            .loading-overlay div[data-testid="stProgressBar"] div[role="progressbar"] {{
+            .loading-screen div[data-testid="stProgressBar"] div[role="progressbar"] {{
                 background: linear-gradient(135deg, {PRIMARY_COLOR}, #2f00b5);
                 border-radius: 999px;
             }}

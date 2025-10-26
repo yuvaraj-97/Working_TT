@@ -11,22 +11,20 @@ class LoadingScreen:
     def __init__(self, title: str, subtitle: str | None = None):
         self.container = st.empty()
         with self.container.container():
-            st.markdown(
-                "<div class='loading-overlay'><div class='loading-card'>",
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                f"<div class='loading-title'>{title}</div>",
-                unsafe_allow_html=True,
-            )
+            st.markdown("<div class='loading-screen'>", unsafe_allow_html=True)
+            if title:
+                st.markdown(
+                    f"<div class='loading-status-title'>{title}</div>",
+                    unsafe_allow_html=True,
+                )
             if subtitle:
                 st.markdown(
-                    f"<div class='loading-subtitle'>{subtitle}</div>",
+                    f"<div class='loading-status-subtitle'>{subtitle}</div>",
                     unsafe_allow_html=True,
                 )
             self.status_placeholder = st.empty()
             self.progress_bar = st.progress(0)
-            st.markdown("</div></div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
     def update(self, message: str, percent_complete: int) -> None:
         percent_complete = max(0, min(100, percent_complete))
