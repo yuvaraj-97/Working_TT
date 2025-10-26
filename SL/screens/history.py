@@ -51,7 +51,8 @@ def render_history_screen() -> None:
         if st.button(
             "Run this configuration again",
             key=f"history_rerun_{entry['id']}",
-            use_container_width=True,
+            type="secondary",
+            help="Queue this configuration and rerun clustering",
         ):
             st.session_state.active_dataset = config.dataset_name
             trigger_clustering_run(copy.deepcopy(config))

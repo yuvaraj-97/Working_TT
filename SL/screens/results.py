@@ -62,9 +62,10 @@ def render_results_screen() -> None:
                     )
                 with header_cols[1]:
                     if st.button(
-                        "Open cluster",
+                        "🔍",
                         key=f"cluster_card_{cluster_id}",
-                        use_container_width=True,
+                        type="secondary",
+                        help="View cluster details",
                     ):
                         st.session_state.selected_cluster = cluster_id
                         navigate_to("cluster_detail")
