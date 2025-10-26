@@ -225,6 +225,7 @@ def execute_pending_run(consolidated_df: pd.DataFrame) -> None:
     st.session_state.pending_run = None
     store_run_history(result)
     navigate_to("results")
+    st.rerun()
 
 
 def prepare_attribute_config(

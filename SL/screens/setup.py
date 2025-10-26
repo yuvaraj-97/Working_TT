@@ -214,13 +214,13 @@ def render_setup_screen(
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    visible_attributes.reset_index(drop=True, inplace=True)
-    visible_attributes.index = visible_attributes.index + 1
+    visible_attributes = visible_attributes.reset_index(drop=True)
 
     attribute_editor = st.data_editor(
         visible_attributes,
         key="attribute_editor",
         use_container_width=True,
+        hide_index=True,
         num_rows="fixed",
         column_config={
             "Include": st.column_config.CheckboxColumn(
@@ -248,6 +248,11 @@ def render_setup_screen(
     )
 
     attribute_editor = attribute_editor.reset_index(drop=True)
+    previous_config = st.session_state.get("attribute_config")
+    if previous_config is None:
+        previous_config = attribute_config.copy()
+    else:
+        previous_config = previous_config.copy()
     updated_config = attribute_config.set_index("Attribute")
     editor_updates = attribute_editor.set_index("Attribute")
     updated_config.loc[
@@ -256,16 +261,28 @@ def render_setup_screen(
     updated_config = updated_config.reset_index()
     st.session_state.attribute_config = updated_config
 
+    previous_subset = previous_config.set_index("Attribute")[[
+        "Include",
+        "Type",
+        "Unit Extraction",
+    ]].sort_index()
+    new_subset = updated_config.set_index("Attribute")[[
+        "Include",
+        "Type",
+        "Unit Extraction",
+    ]].sort_index()
+    if not new_subset.equals(previous_subset):
+        st.session_state.attribute_selection_confirmed = False
+
     selected_attributes_df = updated_config[
         (updated_config["Include"]) & (updated_config["Fill Ratio"] >= min_fill_ratio)
     ]
 
-    action_cols = st.columns([1, 1.2])
-    with action_cols[0]:
-        finalize_clicked = st.button(
-            "Finalize attribute selection",
-            use_container_width=True,
-        )
+    finalize_clicked = st.button(
+        "Finalize attribute selection",
+        key="finalize_attribute_selection",
+        type="secondary",
+    )
     if finalize_clicked:
         if selected_attributes_df.empty:
             st.warning(
@@ -363,7 +380,7 @@ def render_setup_screen(
             f"Automatic configuration will use the recommended `{recommended_metric}` distance metric and a numeric weight of 10."
         )
 
-    run_button = st.button("Run clustering", use_container_width=True)
+    run_button = st.button("Run clustering", key="run_clustering", type="primary")
 
     if run_button:
         run_config = RunConfig(

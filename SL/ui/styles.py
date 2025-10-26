@@ -104,10 +104,24 @@ def configure_page() -> None:
                 font-weight: 600;
                 padding: 0.6rem 1.6rem;
                 box-shadow: 0 14px 32px rgba(100, 0, 255, 0.35);
+                width: fit-content;
+                min-width: 0;
             }}
             .stButton > button:hover,
             .stDownloadButton button:hover {{
                 box-shadow: 0 18px 36px rgba(100, 0, 255, 0.55);
+            }}
+            .stButton > button[data-testid="baseButton-secondary"],
+            .stButton > button[kind="secondary"] {{
+                border: 1px solid {SECONDARY_COLOR};
+                background: transparent;
+                color: {SECONDARY_COLOR};
+                box-shadow: none;
+            }}
+            .stButton > button[data-testid="baseButton-secondary"]:hover,
+            .stButton > button[kind="secondary"]:hover {{
+                border-color: {TEXT_COLOR};
+                color: {TEXT_COLOR};
             }}
             div[data-testid="stMetricValue"] {{
                 color: {TEXT_COLOR};
