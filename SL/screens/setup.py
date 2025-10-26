@@ -294,11 +294,24 @@ def render_setup_screen(
             st.warning(
                 "Select at least one attribute above the minimum fill ratio to continue."
             )
-            st.markdown("</div>", unsafe_allow_html=True)
-            return
+        else:
+            st.caption("Click **Save attribute selection** to confirm your choices.")
 
-        st.session_state.attribute_selection_confirmed = True
-        st.success("Attribute selection saved. Configure clustering below.")
+        if st.button(
+            "Save attribute selection",
+            key="save_attribute_selection",
+            help="Confirm the selected attributes for clustering.",
+        ):
+            if selected_attributes_df.empty:
+                st.warning(
+                    "Select at least one attribute above the minimum fill ratio to continue."
+                )
+            else:
+                st.session_state.attribute_selection_confirmed = True
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
     else:
         configured_attributes = st.session_state.get("attribute_config")
         if configured_attributes is None:
