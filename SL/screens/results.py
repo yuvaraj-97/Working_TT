@@ -6,6 +6,7 @@ import streamlit as st
 
 from models import RunResult
 from state import navigate_to
+from ui.components import material_card  # <-- IMPORT THE COMPONENT
 from workflow import build_downloads
 
 
@@ -57,39 +58,46 @@ def render_results_screen() -> None:
             else:
                 cluster_label = cluster_id + 1
                 cluster_heading = f"Cluster {cluster_label}"
+
+            # --- START OF FIX ---
+            # Use the material_card component within the column
             with column:
-                st.markdown("<div class='cluster-card'>", unsafe_allow_html=True)
-                header_cols = st.columns([3, 1])
-                with header_cols[0]:
-                    st.markdown(
-                        f"<div class='material-header'>{cluster_heading}</div>",
-                        unsafe_allow_html=True,
-                    )
-                with header_cols[1]:
-                    if st.button(
-                        "View",
-                        key=f"cluster_card_{cluster_id}",
-                        type="secondary",
-                        help="View cluster details",
-                    ):
-                        st.session_state.selected_cluster = cluster_id
-                        st.session_state.pending_navigation_target = "Cluster Detail"
-                        navigate_to("cluster_detail")
-                        st.rerun()
-                metric_cols = st.columns(2)
-                with metric_cols[0]:
-                    st.metric("Size", int(cluster_row["cluster_size"]))
-                with metric_cols[1]:
-                    st.metric(
-                        "Mean likeness",
-                        f"{cluster_row['mean_likeness']:.2f}",
-                    )
-                representatives = result.roster_parts.get(cluster_id, [])
-                if representatives:
-                    st.caption(
-                        "Representative parts: " + ", ".join(representatives)
-                    )
-                st.markdown("</div>", unsafe_allow_html=True)
+                with material_card(card_class="cluster-card") as card:
+                    # Call all elements on the 'card' object
+                    header_cols = card.columns([3, 1])
+                    with header_cols[0]:
+                        card.markdown(
+                            f"<div class='material-header'>{cluster_heading}</div>",
+                            unsafe_allow_html=True,
+                        )
+                    with header_cols[1]:
+                        if card.button(  # Use card.button
+                            "View",
+                            key=f"cluster_card_{cluster_id}",
+                            type="secondary",
+                            help="View cluster details",
+                        ):
+                            st.session_state.selected_cluster = cluster_id
+                            st.session_state.pending_navigation_target = "Cluster Detail"
+                            navigate_to("cluster_detail")
+                            st.rerun()
+                            
+                    metric_cols = card.columns(2)  # Use card.columns
+                    with metric_cols[0]:
+                        card.metric("Size", int(cluster_row["cluster_size"]))
+                    with metric_cols[1]:
+                        card.metric(
+                            "Mean likeness",
+                            f"{cluster_row['mean_likeness']:.2f}",
+                        )
+                        
+                    representatives = result.roster_parts.get(cluster_id, [])
+                    if representatives:
+                        card.caption(  # Use card.caption
+                            "Representative parts: " + ", ".join(representatives)
+                        )
+            # --- END OF FIX ---
+            
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div class='material-card'>", unsafe_allow_html=True)
