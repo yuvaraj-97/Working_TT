@@ -6,7 +6,6 @@ import streamlit as st
 
 from models import RunResult
 from state import navigate_to
-from ui.components import material_card  # <-- IMPORT THE COMPONENT
 from workflow import build_downloads
 
 
@@ -18,11 +17,10 @@ def render_results_screen() -> None:
         st.info("Run clustering from the setup screen to see results here.")
         return
 
-    st.markdown("<div class='material-card'>", unsafe_allow_html=True)
-    st.markdown("<div class='material-header'>Run summary</div>", unsafe_allow_html=True)
     dataset_label = result.config.filters.get(
         "Commodity", result.config.dataset_name
     )
+    st.subheader("Run summary")
     st.caption(f"Dataset: {dataset_label}")
     summary_cols = st.columns(3)
     with summary_cols[0]:
@@ -31,20 +29,12 @@ def render_results_screen() -> None:
         st.metric("Metric", result.metric)
     with summary_cols[2]:
         st.metric("Eps selected", f"{result.eps_selected:.3f}")
-    st.markdown("</div>", unsafe_allow_html=True)
 
     if result.cluster_summary.empty:
         st.warning("No clusters were identified. Adjust the configuration and try again.")
     else:
-        st.markdown("<div class='material-card'>", unsafe_allow_html=True)
-        st.markdown(
-            "<div class='material-header'>Cluster overview</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            "<div class='material-subtitle'>Open a cluster card to explore its details.</div>",
-            unsafe_allow_html=True,
-        )
+        st.subheader("Cluster overview")
+        st.caption("Open a cluster card to explore its details.")
 
         clusters = result.cluster_summary.reset_index(drop=True)
         for index, (_, cluster_row) in enumerate(clusters.iterrows()):
@@ -59,52 +49,36 @@ def render_results_screen() -> None:
                 cluster_label = cluster_id + 1
                 cluster_heading = f"Cluster {cluster_label}"
 
-            # --- START OF FIX ---
-            # Use the material_card component within the column
             with column:
-                with material_card(card_class="cluster-card") as card:
-                    # Call all elements on the 'card' object
-                    header_cols = card.columns([3, 1])
-                    with header_cols[0]:
-                        card.markdown(
-                            f"<div class='material-header'>{cluster_heading}</div>",
-                            unsafe_allow_html=True,
-                        )
-                    with header_cols[1]:
-                        if card.button(  # Use card.button
-                            "View",
-                            key=f"cluster_card_{cluster_id}",
-                            type="secondary",
-                            help="View cluster details",
-                        ):
-                            st.session_state.selected_cluster = cluster_id
-                            st.session_state.pending_navigation_target = "Cluster Detail"
-                            navigate_to("cluster_detail")
-                            st.rerun()
-                            
-                    metric_cols = card.columns(2)  # Use card.columns
-                    with metric_cols[0]:
-                        card.metric("Size", int(cluster_row["cluster_size"]))
-                    with metric_cols[1]:
-                        card.metric(
-                            "Mean likeness",
-                            f"{cluster_row['mean_likeness']:.2f}",
-                        )
-                        
-                    representatives = result.roster_parts.get(cluster_id, [])
-                    if representatives:
-                        card.caption(  # Use card.caption
-                            "Representative parts: " + ", ".join(representatives)
-                        )
-            # --- END OF FIX ---
-            
-        st.markdown("</div>", unsafe_allow_html=True)
+                header_cols = st.columns([5, 1])
+                with header_cols[0]:
+                    st.markdown(f"**{cluster_heading}**")
+                with header_cols[1]:
+                    if st.button(
+                        "View",
+                        key=f"cluster_card_{cluster_id}",
+                        type="secondary",
+                        help="View cluster details",
+                    ):
+                        st.session_state.selected_cluster = cluster_id
+                        st.session_state.pending_navigation_target = "Cluster Detail"
+                        navigate_to("cluster_detail")
+                        st.rerun()
 
-        st.markdown("<div class='material-card'>", unsafe_allow_html=True)
-        st.markdown(
-            "<div class='material-header'>Cluster metrics</div>",
-            unsafe_allow_html=True,
-        )
+                metric_cols = st.columns(2)
+                with metric_cols[0]:
+                    st.metric("Size", int(cluster_row["cluster_size"]))
+                with metric_cols[1]:
+                    st.metric(
+                        "Mean likeness",
+                        f"{cluster_row['mean_likeness']:.2f}",
+                    )
+
+                representatives = result.roster_parts.get(cluster_id, [])
+                if representatives:
+                    st.caption("Representative parts: " + ", ".join(representatives))
+
+        st.subheader("Cluster metrics")
         cluster_metrics_display = result.cluster_summary.copy()
         cluster_metrics_display["Cluster"] = cluster_metrics_display["cluster"].apply(
             lambda value: "Noise" if int(value) < 0 else str(int(value) + 1)
@@ -123,13 +97,8 @@ def render_results_screen() -> None:
                 ),
             },
         )
-        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='material-card'>", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='material-header'>Candidate evaluation</div>",
-        unsafe_allow_html=True,
-    )
+    st.subheader("Candidate evaluation")
     st.dataframe(
         result.candidate_df,
         use_container_width=True,
@@ -154,7 +123,6 @@ def render_results_screen() -> None:
             ),
         },
     )
-    st.markdown("</div>", unsafe_allow_html=True)
 
     excel_bytes, pdf_bytes = build_downloads(result)
 
