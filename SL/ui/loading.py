@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import streamlit as st
+from streamlit.delta_generator import DeltaGenerator
 
 
 class LoadingScreen:
     """Render a branded loading overlay and expose update hooks."""
 
-    def __init__(self, title: str, subtitle: str | None = None):
-        self.container = st.empty()
+    def __init__(
+        self,
+        title: str,
+        subtitle: str | None = None,
+        container: DeltaGenerator | None = None,
+    ):
+        self.container = container or st.empty()
         with self.container.container():
             st.markdown("<div class='loading-screen'>", unsafe_allow_html=True)
             if title:

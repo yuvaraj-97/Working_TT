@@ -11,8 +11,9 @@ from clustering import recommend_dbscan_metric
 
 from data_access import resolve_column
 from models import RunConfig
-from state import reset_app_state, trigger_clustering_run
-from workflow import prepare_attribute_config
+from state import navigate_to, reset_app_state, store_run_history
+from ui.loading import LoadingScreen
+from workflow import perform_clustering, prepare_attribute_config
 
 
 def render_setup_screen(
@@ -439,6 +440,7 @@ def render_setup_screen(
         )
 
     run_button = st.button("Run clustering", key="run_clustering", type="primary")
+    progress_placeholder = st.empty()
 
     if run_button:
         run_config = RunConfig(
@@ -459,6 +461,22 @@ def render_setup_screen(
             manual_eps=manual_eps,
             min_fill_ratio=min_fill_ratio,
         )
-        trigger_clustering_run(run_config)
+        loader = LoadingScreen(
+            "Running clustering",
+            "This may take a few seconds",
+            container=progress_placeholder,
+        )
+        try:
+            result = perform_clustering(consolidated_df, run_config, loader)
+        except Exception as exc:  # pragma: no cover - surface friendly error
+            loader.clear()
+            st.error(str(exc))
+        else:
+            loader.clear()
+            st.session_state.last_result = result
+            st.session_state.selected_cluster = None
+            store_run_history(result)
+            navigate_to("results")
+            st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
