@@ -27,17 +27,43 @@ Image.MAX_IMAGE_PIXELS = 1_000_000_000
 def ensure_dir(p: Path):
     p.mkdir(parents=True, exist_ok=True)
 
-def pil2cv(img):  return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-def cv2pil(img):  return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+def _validate_pil_image(pil_img: Image.Image, context: str = ""):
+    """Raise ValueError if the PIL image is empty (width/height == 0)."""
+    if pil_img is None:
+        raise ValueError(f"Empty image supplied{': ' + context if context else ''}")
+    w, h = getattr(pil_img, "width", 0), getattr(pil_img, "height", 0)
+    if not w or not h:
+        raise ValueError(f"Zero-sized image encountered{': ' + context if context else ''}")
 
-def preprocess_for_ocr(pil_img: Image.Image) -> Image.Image:
+
+def pil2cv(img: Image.Image, context: str = ""):
+    _validate_pil_image(img, context)
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    arr = np.array(img)
+    if arr.size == 0:
+        raise ValueError(f"Image data empty after conversion{': ' + context if context else ''}")
+    return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+
+
+def cv2pil(img):
+    if img is None or img.size == 0:
+        raise ValueError("Empty OpenCV image supplied")
+    return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+
+def preprocess_for_ocr(pil_img: Image.Image, context: str = "") -> Image.Image:
     """General cleaning that works well on scans/drawings/tables."""
-    cv = pil2cv(pil_img)
-    gray = cv2.cvtColor(cv, cv2.COLOR_BGR2GRAY)
-    gray = cv2.fastNlMeansDenoising(gray, h=10)
-    th = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                               cv2.THRESH_BINARY, 35, 15)
-    return cv2pil(cv2.cvtColor(th, cv2.COLOR_GRAY2BGR))
+    try:
+        cv = pil2cv(pil_img, context=context)
+        gray = cv2.cvtColor(cv, cv2.COLOR_BGR2GRAY)
+        gray = cv2.fastNlMeansDenoising(gray, h=10)
+        th = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                   cv2.THRESH_BINARY, 35, 15)
+        return cv2pil(cv2.cvtColor(th, cv2.COLOR_GRAY2BGR))
+    except (ValueError, cv2.error) as exc:
+        msg_ctx = f" ({context})" if context else ""
+        print(f"[WARN] Skipping preprocessing{msg_ctx}: {exc}")
+        return pil_img.convert("RGB")
 
 def autorotate(pil_img: Image.Image) -> Image.Image:
     """Use Tesseract OSD to correct rotation when OCR’ing."""
@@ -95,9 +121,9 @@ def choose_dpi(has_text: bool, img_cov: float, median_pt: float | None) -> int:
         return 250  # big fonts
     return 300  # normal text
 
-def ocr_image(pil_img: Image.Image, lang: str, table_mode=False) -> str:
+def ocr_image(pil_img: Image.Image, lang: str, table_mode=False, context: str = "") -> str:
     pil_img = autorotate(pil_img)
-    pil_img = preprocess_for_ocr(pil_img)
+    pil_img = preprocess_for_ocr(pil_img, context=context or "ocr_image")
     if table_mode:
         cfg = r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./-()+°%,±Øø'
     else:
@@ -105,10 +131,11 @@ def ocr_image(pil_img: Image.Image, lang: str, table_mode=False) -> str:
     return pytesseract.image_to_string(pil_img, lang=lang, config=cfg)
 
 # ------ Basic grid/table detector (best effort) ------
-def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path) -> bool:
+def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context: str = "") -> bool:
     """Detect grid lines, OCR cells, and write CSV. Returns True if a table was produced."""
     ensure_dir(out_csv.parent)
-    cv = pil2cv(preprocess_for_ocr(pil_img))
+    ctx = context or f"table:{out_csv.name}"
+    cv = pil2cv(preprocess_for_ocr(pil_img, context=ctx), context=ctx)
     gray = cv2.cvtColor(cv, cv2.COLOR_BGR2GRAY)
     inv = 255 - gray
 
@@ -163,6 +190,33 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path) -> bool
     return True
 
 # ------------------- Per-page runner -------------------
+def render_pdf_page(pdf_path: Path, page_index: int, dpi: int, poppler_bin: str | None) -> Image.Image | None:
+    """Render a single PDF page into a PIL image, handling empty results safely."""
+    try:
+        images = convert_from_path(
+            str(pdf_path),
+            first_page=page_index + 1,
+            last_page=page_index + 1,
+            dpi=dpi,
+            poppler_path=poppler_bin,
+        )
+    except Exception as exc:
+        print(f"[ERROR] {pdf_path.name} page {page_index+1}: convert_from_path failed ({exc})")
+        return None
+
+    if not images:
+        print(f"[WARN] {pdf_path.name} page {page_index+1}: no rasterized images returned")
+        return None
+
+    img = images[0]
+    try:
+        _validate_pil_image(img, context=f"{pdf_path.name}#p{page_index+1}")
+    except ValueError as exc:
+        print(f"[WARN] {pdf_path.name} page {page_index+1}: {exc}")
+        return None
+    return img
+
+
 def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
                  poppler_bin: str | None, tiles=(3,3), tile_overlap=0.04):
     page = doc[page_index]
@@ -177,23 +231,31 @@ def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
         txt_native = page.get_text("text").strip()
         extra = ""
         if img_cov > 0.15:
-            pil = convert_from_path(str(pdf_path), first_page=page_index+1, last_page=page_index+1,
-                                    dpi=dpi, poppler_path=poppler_bin)[0]
+            pil = render_pdf_page(pdf_path, page_index, dpi, poppler_bin)
+            if pil is None:
+                print(f"[WARN] Skipping OCR image regions for {pdf_path.name} page {page_index+1}: could not render image")
+                page_txt.write_text(txt_native, encoding="utf-8")
+                return dpi, "native", img_cov
             W,H = pil.size
             img_region = pil.crop((0, int(H*0.4), W, H))
-            made_csv = extract_table_to_csv(img_region, lang, page_csv)
+            made_csv = extract_table_to_csv(img_region, lang, page_csv,
+                                           context=f"{pdf_path.name}#p{page_index+1}-img")
             if not made_csv:
-                extra = "\n\n[OCR image regions]\n" + ocr_image(img_region, lang, table_mode=True)
+                extra = "\n\n[OCR image regions]\n" + ocr_image(img_region, lang, table_mode=True,
+                                                                   context=f"{pdf_path.name}#p{page_index+1}-img")
         page_txt.write_text(txt_native + extra, encoding="utf-8")
         return dpi, "native+ocr" if img_cov > 0.15 else "native", img_cov
 
     # Image-only / dominant → OCR with tiling + try table CSV
-    pil = convert_from_path(str(pdf_path), first_page=page_index+1, last_page=page_index+1,
-                            dpi=dpi, poppler_path=poppler_bin)[0]
+    pil = render_pdf_page(pdf_path, page_index, dpi, poppler_bin)
+    if pil is None:
+        print(f"[ERROR] {pdf_path.name} page {page_index+1}: failed to rasterize for OCR")
+        return dpi, "render-error", img_cov
     pil = autorotate(pil)
-    pil_clean = preprocess_for_ocr(pil)
+    pil_clean = preprocess_for_ocr(pil, context=f"{pdf_path.name}#p{page_index+1}")
 
-    _ = extract_table_to_csv(pil_clean, lang, page_csv)
+    _ = extract_table_to_csv(pil_clean, lang, page_csv,
+                             context=f"{pdf_path.name}#p{page_index+1}")
 
     W, H = pil_clean.size
     nx, ny = tiles
