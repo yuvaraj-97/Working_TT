@@ -1,5 +1,5 @@
 # sdc.py
-import os, re, glob, argparse
+import os, re, glob, argparse, json
 from statistics import median
 from pathlib import Path
 from typing import Optional, Sequence
@@ -131,8 +131,15 @@ def ocr_image(pil_img: Image.Image, lang: str, table_mode=False, context: str = 
     return pytesseract.image_to_string(pil_img, lang=lang, config=cfg)
 
 # ------ Basic grid/table detector (best effort) ------
-def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context: str = "") -> bool:
-    """Detect grid lines, OCR cells, and write CSV. Returns True if a table was produced."""
+def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context: str = "") -> tuple[bool, list[list[str]]]:
+    """Detect grid lines, OCR cells, and write CSV.
+
+    Returns
+    -------
+    tuple[bool, list[list[str]]]
+        A flag indicating whether a table was detected along with the table
+        contents (each inner list represents one row).
+    """
     ensure_dir(out_csv.parent)
     ctx = context or f"table:{out_csv.name}"
     cv = pil2cv(preprocess_for_ocr(pil_img, context=ctx), context=ctx)
@@ -157,7 +164,7 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context
             continue
         boxes.append((x,y,w,h))
     if not boxes:
-        return False
+        return False, []
 
     boxes = sorted(boxes, key=lambda b: (b[1], b[0]))
     # group into rows
@@ -187,7 +194,7 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context
         table.append(row_text)
 
     pd.DataFrame(table).to_csv(out_csv, index=False, header=False)
-    return True
+    return True, table
 
 # ------------------- Per-page runner -------------------
 def render_pdf_page(pdf_path: Path, page_index: int, dpi: int, poppler_bin: str | None) -> Image.Image | None:
@@ -226,36 +233,64 @@ def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
     page_txt = out_dir / f"page_{page_index+1:03d}.txt"
     page_csv = out_dir / f"page_{page_index+1:03d}_table.csv"
 
+    page_info: dict[str, object] = {
+        "page_number": page_index + 1,
+        "dpi": dpi,
+        "image_coverage": img_cov,
+        "mode": None,
+        "raw_text": None,
+        "ocr_text": None,
+        "table": None,
+        "notes": [],
+    }
+
     if has_text and img_cov < 0.90:
         # Prefer native text; OCR image regions if worthwhile
-        txt_native = page.get_text("text").strip()
-        extra = ""
+        txt_native = page.get_text("raw").strip()
         if img_cov > 0.15:
             pil = render_pdf_page(pdf_path, page_index, dpi, poppler_bin)
             if pil is None:
                 print(f"[WARN] Skipping OCR image regions for {pdf_path.name} page {page_index+1}: could not render image")
                 page_txt.write_text(txt_native, encoding="utf-8")
-                return dpi, "native", img_cov
+                page_info["mode"] = "native"
+                page_info["raw_text"] = txt_native
+                page_info["notes"].append("image-region-render-failed")
+                return dpi, "native", img_cov, page_info
             W,H = pil.size
             img_region = pil.crop((0, int(H*0.4), W, H))
-            made_csv = extract_table_to_csv(img_region, lang, page_csv,
-                                           context=f"{pdf_path.name}#p{page_index+1}-img")
-            if not made_csv:
-                extra = "\n\n[OCR image regions]\n" + ocr_image(img_region, lang, table_mode=True,
-                                                                   context=f"{pdf_path.name}#p{page_index+1}-img")
-        page_txt.write_text(txt_native + extra, encoding="utf-8")
-        return dpi, "native+ocr" if img_cov > 0.15 else "native", img_cov
+            made_csv, table_rows = extract_table_to_csv(img_region, lang, page_csv,
+                                                        context=f"{pdf_path.name}#p{page_index+1}-img")
+            if made_csv:
+                page_info["table"] = {
+                    "csv": page_csv.name,
+                    "rows": table_rows,
+                }
+            else:
+                ocr_txt = ocr_image(img_region, lang, table_mode=True,
+                                    context=f"{pdf_path.name}#p{page_index+1}-img").strip()
+                page_info["ocr_text"] = ocr_txt
+        page_txt.write_text(txt_native, encoding="utf-8")
+        page_info["mode"] = "native+ocr" if img_cov > 0.15 else "native"
+        page_info["raw_text"] = txt_native
+        return dpi, page_info["mode"], img_cov, page_info
 
     # Image-only / dominant → OCR with tiling + try table CSV
     pil = render_pdf_page(pdf_path, page_index, dpi, poppler_bin)
     if pil is None:
         print(f"[ERROR] {pdf_path.name} page {page_index+1}: failed to rasterize for OCR")
-        return dpi, "render-error", img_cov
+        page_info["mode"] = "render-error"
+        page_info["notes"].append("render-failed")
+        return dpi, "render-error", img_cov, page_info
     pil = autorotate(pil)
     pil_clean = preprocess_for_ocr(pil, context=f"{pdf_path.name}#p{page_index+1}")
 
-    _ = extract_table_to_csv(pil_clean, lang, page_csv,
-                             context=f"{pdf_path.name}#p{page_index+1}")
+    made_csv, table_rows = extract_table_to_csv(pil_clean, lang, page_csv,
+                                                context=f"{pdf_path.name}#p{page_index+1}")
+    if made_csv:
+        page_info["table"] = {
+            "csv": page_csv.name,
+            "rows": table_rows,
+        }
 
     W, H = pil_clean.size
     nx, ny = tiles
@@ -274,14 +309,19 @@ def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
                 tile_texts.append(f"[tile {ix},{iy}]\n{txt.strip()}\n")
                 pbar_tiles.update(1)
 
-    page_txt.write_text("\n".join(tile_texts), encoding="utf-8")
-    return dpi, "ocr-tiled", img_cov
+    ocr_text = "\n".join(tile_texts)
+    page_txt.write_text(ocr_text, encoding="utf-8")
+    page_info["mode"] = "ocr-tiled"
+    page_info["ocr_text"] = ocr_text.strip()
+    page_info["raw_text"] = None
+    return dpi, "ocr-tiled", img_cov, page_info
 
 # ------------------- PDF runner -------------------
 def process_pdf(pdf_path: Path, out_root: Path, lang: str, poppler_bin: str | None):
     out_dir = out_root / pdf_path.stem
     ensure_dir(out_dir)
     page_summaries = []
+    page_infos = []
 
     try:
         with fitz.open(str(pdf_path)) as doc:
@@ -291,11 +331,22 @@ def process_pdf(pdf_path: Path, out_root: Path, lang: str, poppler_bin: str | No
             pages_iter = tqdm(range(len(doc)), desc=f"pages: {pdf_path.name}", leave=False)
             for p in pages_iter:
                 try:
-                    dpi, mode, imgcov = process_page(doc, pdf_path, p, out_dir, lang, poppler_bin)
+                    dpi, mode, imgcov, page_info = process_page(doc, pdf_path, p, out_dir, lang, poppler_bin)
                     page_summaries.append((p+1, dpi, mode, imgcov))
+                    page_infos.append(page_info)
                 except Exception as e:
                     (out_dir / "errors.log").open("a", encoding="utf-8").write(f"page {p+1}: {e}\n")
                     print(f"[ERROR] {pdf_path.name} page {p+1}: {e}")
+                    page_infos.append({
+                        "page_number": p + 1,
+                        "dpi": None,
+                        "image_coverage": None,
+                        "mode": "error",
+                        "raw_text": None,
+                        "ocr_text": None,
+                        "table": None,
+                        "notes": [f"exception: {e}"],
+                    })
     except Exception as e:
         print(f"[FATAL] Could not open {pdf_path}: {e}")
         return
@@ -312,6 +363,15 @@ def process_pdf(pdf_path: Path, out_root: Path, lang: str, poppler_bin: str | No
 
     pd.DataFrame(page_summaries, columns=["page", "dpi", "mode", "image_coverage"])\
       .to_csv(out_dir / "manifest.csv", index=False)
+
+    storage_doc = {
+        "document": pdf_path.name,
+        "pages": page_infos,
+    }
+    (out_dir / "storage.json").write_text(
+        json.dumps(storage_doc, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 # ------------------- CLI / Main -------------------
 def parse_args(argv: Optional[Sequence[str]] = None):
