@@ -20,46 +20,66 @@ POPPLER_BIN_DEFAULT = r"C:\Users\U215438\Downloads\Release-25.07.0-0\poppler-25.
 LANG_DEFAULT = "eng"
 # =============================================================
 
+# Enable verbose debug logging to help track failures. Set PDF_DEBUG=0 to silence.
+DEBUG = os.getenv("PDF_DEBUG", "1").lower() in {"1", "true", "yes", "on"}
+
+
+def debug(msg: str):
+    """Emit diagnostic messages without disturbing tqdm progress bars."""
+    if DEBUG:
+        tqdm.write(f"[DEBUG] {msg}")
+
+
 # Make Pillow safe for huge engineering scans (trusted local files)
 Image.MAX_IMAGE_PIXELS = 1_000_000_000
 
 # ------------------- Helpers -------------------
 def ensure_dir(p: Path):
+    debug(f"Ensuring directory exists: {p}")
     p.mkdir(parents=True, exist_ok=True)
 
 def _validate_pil_image(pil_img: Image.Image, context: str = ""):
     """Raise ValueError if the PIL image is empty (width/height == 0)."""
     if pil_img is None:
+        debug(f"PIL validation failed: image is None ({context})")
         raise ValueError(f"Empty image supplied{': ' + context if context else ''}")
     w, h = getattr(pil_img, "width", 0), getattr(pil_img, "height", 0)
     if not w or not h:
+        debug(f"PIL validation failed: zero-sized image ({context})")
         raise ValueError(f"Zero-sized image encountered{': ' + context if context else ''}")
 
 
 def pil2cv(img: Image.Image, context: str = ""):
+    debug(f"Converting PIL -> CV2 array ({context}) size={getattr(img, 'size', None)} mode={getattr(img, 'mode', None)}")
     _validate_pil_image(img, context)
     if img.mode != "RGB":
         img = img.convert("RGB")
     arr = np.array(img)
     if arr.size == 0:
+        debug(f"PIL -> CV2 conversion produced empty array ({context})")
         raise ValueError(f"Image data empty after conversion{': ' + context if context else ''}")
     return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
 
 
 def cv2pil(img):
     if img is None or img.size == 0:
+        debug("CV2 -> PIL conversion requested on empty image")
         raise ValueError("Empty OpenCV image supplied")
+    debug(f"Converting CV2 -> PIL image with shape={getattr(img, 'shape', None)}")
     return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 
 def preprocess_for_ocr(pil_img: Image.Image, context: str = "") -> Image.Image:
     """General cleaning that works well on scans/drawings/tables."""
     try:
+        debug(f"Preprocessing image for OCR ({context})")
         cv = pil2cv(pil_img, context=context)
         gray = cv2.cvtColor(cv, cv2.COLOR_BGR2GRAY)
         gray = cv2.fastNlMeansDenoising(gray, h=10)
         th = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                    cv2.THRESH_BINARY, 35, 15)
-        return cv2pil(cv2.cvtColor(th, cv2.COLOR_GRAY2BGR))
+        result = cv2pil(cv2.cvtColor(th, cv2.COLOR_GRAY2BGR))
+        debug(f"Preprocessing complete ({context}) result_size={result.size}")
+        return result
     except (ValueError, cv2.error) as exc:
         msg_ctx = f" ({context})" if context else ""
         print(f"[WARN] Skipping preprocessing{msg_ctx}: {exc}")
@@ -68,11 +88,14 @@ def preprocess_for_ocr(pil_img: Image.Image, context: str = "") -> Image.Image:
 def autorotate(pil_img: Image.Image) -> Image.Image:
     """Use Tesseract OSD to correct rotation when OCR’ing."""
     try:
+        debug(f"Attempting autorotate size={pil_img.size}")
         osd = pytesseract.image_to_osd(pil_img)
         m = re.search(r"Rotate:\s+(\d+)", osd)
         angle = int(m.group(1)) if m else 0
+        debug(f"Autorotate detected angle={angle}")
         return pil_img.rotate(-angle, expand=True, fillcolor="white") if angle else pil_img
     except Exception:
+        debug("Autorotate failed; returning original image")
         return pil_img
 
 def page_profile(page: fitz.Page):
@@ -109,26 +132,42 @@ def page_profile(page: fitz.Page):
     has_text = text_chars >= 20
     med_font = median(font_sizes) if font_sizes else None
     coverage = img_area / area
+    debug(
+        "Page profile computed: "
+        f"has_text={has_text} text_chars={text_chars} img_coverage={coverage:.3f} "
+        f"median_font={med_font}"
+    )
     return has_text, coverage, med_font
 
 def choose_dpi(has_text: bool, img_cov: float, median_pt: float | None) -> int:
     """Adaptive DPI policy per page."""
     if not has_text or img_cov >= 0.90:
-        return 400  # image-only / dominant scan
-    if median_pt is not None and median_pt < 8.5:
-        return 350  # tiny fonts
-    if median_pt is not None and median_pt > 13:
-        return 250  # big fonts
-    return 300  # normal text
+        dpi = 400  # image-only / dominant scan
+    elif median_pt is not None and median_pt < 8.5:
+        dpi = 350  # tiny fonts
+    elif median_pt is not None and median_pt > 13:
+        dpi = 250  # big fonts
+    else:
+        dpi = 300  # normal text
+    debug(
+        "choose_dpi result: "
+        f"has_text={has_text} img_cov={img_cov:.3f} median_pt={median_pt} -> dpi={dpi}"
+    )
+    return dpi
 
 def ocr_image(pil_img: Image.Image, lang: str, table_mode=False, context: str = "") -> str:
+    debug(
+        f"Starting OCR ({context}) table_mode={table_mode} lang={lang} size={pil_img.size}"
+    )
     pil_img = autorotate(pil_img)
     pil_img = preprocess_for_ocr(pil_img, context=context or "ocr_image")
     if table_mode:
         cfg = r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./-()+°%,±Øø'
     else:
         cfg = r'--oem 3 --psm 6'
-    return pytesseract.image_to_string(pil_img, lang=lang, config=cfg)
+    txt = pytesseract.image_to_string(pil_img, lang=lang, config=cfg)
+    debug(f"OCR complete ({context}) chars={len(txt)}")
+    return txt
 
 # ------ Basic grid/table detector (best effort) ------
 def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context: str = "") -> tuple[bool, list[list[str]]]:
@@ -142,11 +181,14 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context
     """
     ensure_dir(out_csv.parent)
     ctx = context or f"table:{out_csv.name}"
-    cv = pil2cv(preprocess_for_ocr(pil_img, context=ctx), context=ctx)
+    debug(f"Attempting table extraction ({ctx}) -> {out_csv}")
+    processed = preprocess_for_ocr(pil_img, context=ctx)
+    cv = pil2cv(processed, context=ctx)
     gray = cv2.cvtColor(cv, cv2.COLOR_BGR2GRAY)
     inv = 255 - gray
 
     H, W = inv.shape
+    debug(f"Table candidate image size=({W},{H})")
     horiz_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(10, W // 60), 1))
     vert_kernel  = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(10, H // 40)))
 
@@ -155,6 +197,7 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context
     grid  = cv2.add(horiz, vert)
 
     contours, _ = cv2.findContours(grid, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    debug(f"Found {len(contours)} contours for table detection ({ctx})")
     boxes = []
     for c in contours:
         x,y,w,h = cv2.boundingRect(c)
@@ -166,7 +209,9 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context
         if w > W*0.98 and h > H*0.15:  # skip large outer borders
             continue
         boxes.append((x,y,w,h))
+    debug(f"Filtered to {len(boxes)} potential table cells ({ctx})")
     if not boxes:
+        debug(f"No valid boxes detected for table ({ctx})")
         return False, []
 
     boxes = sorted(boxes, key=lambda b: (b[1], b[0]))
@@ -184,20 +229,22 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context
     col_count = max(len(r) for r in rows)
     cfg_whitelist = r'--oem 3 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./-()+°%±Øø,'
     table = []
-    for r in rows:
+    for row_index, r in enumerate(rows):
         if len(r) < col_count:
             r = r + [r[-1]]*(col_count - len(r))
         row_text = []
-        for (x,y,w,h) in r[:col_count]:
+        for col_index, (x,y,w,h) in enumerate(r[:col_count]):
             pad = 2
             x0,y0,x1,y1 = max(0,x+pad), max(0,y+pad), min(W,x+w-pad), min(H,y+h-pad)
             if x1 <= x0 or y1 <= y0:
                 # Degenerate crop after padding – treat as empty cell
                 row_text.append("")
+                debug(f"Empty crop for cell ({row_index},{col_index}) in {ctx}")
                 continue
             cell_img = cv[y0:y1, x0:x1]
             if cell_img.size == 0:
                 row_text.append("")
+                debug(f"Zero-sized cell ({row_index},{col_index}) in {ctx}")
                 continue
             cell = cv2pil(cell_img)
             txt = pytesseract.image_to_string(cell, lang=lang, config=cfg_whitelist)
@@ -205,12 +252,16 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context
         table.append(row_text)
 
     pd.DataFrame(table).to_csv(out_csv, index=False, header=False)
+    debug(f"Table extraction complete ({ctx}) rows={len(table)} cols={col_count}")
     return True, table
 
 # ------------------- Per-page runner -------------------
 def render_pdf_page(pdf_path: Path, page_index: int, dpi: int, poppler_bin: str | None) -> Image.Image | None:
     """Render a single PDF page into a PIL image, handling empty results safely."""
     try:
+        debug(
+            f"Rendering page {page_index+1} of {pdf_path.name} at {dpi} dpi with poppler={poppler_bin}"
+        )
         images = convert_from_path(
             str(pdf_path),
             first_page=page_index + 1,
@@ -227,6 +278,9 @@ def render_pdf_page(pdf_path: Path, page_index: int, dpi: int, poppler_bin: str 
         return None
 
     img = images[0]
+    debug(
+        f"Rendered page {page_index+1} of {pdf_path.name}: image_size={getattr(img, 'size', None)}"
+    )
     try:
         _validate_pil_image(img, context=f"{pdf_path.name}#p{page_index+1}")
     except ValueError as exc:
@@ -237,9 +291,14 @@ def render_pdf_page(pdf_path: Path, page_index: int, dpi: int, poppler_bin: str 
 
 def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
                  poppler_bin: str | None, tiles=(3,3), tile_overlap=0.04):
+    debug(f"Processing {pdf_path.name} page {page_index+1}")
     page = doc[page_index]
     has_text, img_cov, med_pt = page_profile(page)
     dpi = choose_dpi(has_text, img_cov, med_pt)
+    debug(
+        f"Page {page_index+1}: has_text={has_text} img_cov={img_cov:.3f} "
+        f"median_font={med_pt} dpi={dpi}"
+    )
 
     page_txt = out_dir / f"page_{page_index+1:03d}.txt"
     page_csv = out_dir / f"page_{page_index+1:03d}_table.csv"
@@ -258,6 +317,9 @@ def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
     if has_text and img_cov < 0.90:
         # Prefer native text; OCR image regions if worthwhile
         txt_native = page.get_text("raw").strip()
+        debug(
+            f"Page {page_index+1}: using native text (len={len(txt_native)}) with img_cov={img_cov:.3f}"
+        )
         if img_cov > 0.15:
             pil = render_pdf_page(pdf_path, page_index, dpi, poppler_bin)
             if pil is None:
@@ -268,10 +330,12 @@ def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
                 page_info["notes"].append("image-region-render-failed")
                 return dpi, "native", img_cov, page_info
             W,H = pil.size
+            debug(f"Page {page_index+1}: rendered native+image region size=({W},{H})")
             img_region = pil.crop((0, int(H*0.4), W, H))
             made_csv, table_rows = extract_table_to_csv(img_region, lang, page_csv,
                                                         context=f"{pdf_path.name}#p{page_index+1}-img")
             if made_csv:
+                debug(f"Page {page_index+1}: table detected in image region rows={len(table_rows)}")
                 page_info["table"] = {
                     "csv": page_csv.name,
                     "rows": table_rows,
@@ -279,10 +343,12 @@ def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
             else:
                 ocr_txt = ocr_image(img_region, lang, table_mode=True,
                                     context=f"{pdf_path.name}#p{page_index+1}-img").strip()
+                debug(f"Page {page_index+1}: OCR image region chars={len(ocr_txt)}")
                 page_info["ocr_text"] = ocr_txt
         page_txt.write_text(txt_native, encoding="utf-8")
         page_info["mode"] = "native+ocr" if img_cov > 0.15 else "native"
         page_info["raw_text"] = txt_native
+        debug(f"Page {page_index+1}: finished native branch mode={page_info['mode']}")
         return dpi, page_info["mode"], img_cov, page_info
 
     # Image-only / dominant → OCR with tiling + try table CSV
@@ -294,10 +360,12 @@ def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
         return dpi, "render-error", img_cov, page_info
     pil = autorotate(pil)
     pil_clean = preprocess_for_ocr(pil, context=f"{pdf_path.name}#p{page_index+1}")
+    debug(f"Page {page_index+1}: cleaned image size={pil_clean.size}")
 
     made_csv, table_rows = extract_table_to_csv(pil_clean, lang, page_csv,
                                                 context=f"{pdf_path.name}#p{page_index+1}")
     if made_csv:
+        debug(f"Page {page_index+1}: table detected rows={len(table_rows)}")
         page_info["table"] = {
             "csv": page_csv.name,
             "rows": table_rows,
@@ -309,6 +377,9 @@ def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
     dx, dy = int(tw*tile_overlap), int(th*tile_overlap)
 
     tile_texts = []
+    debug(
+        f"Page {page_index+1}: tiling image W={W} H={H} nx={nx} ny={ny} overlap={tile_overlap}"
+    )
     with tqdm(total=nx*ny, desc=f"  tiles@p{page_index+1}", leave=False) as pbar_tiles:
         for iy in range(ny):
             for ix in range(nx):
@@ -318,6 +389,9 @@ def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
                 cfg = r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./-()+°%,±Øø'
                 txt = pytesseract.image_to_string(tile, lang=lang, config=cfg)
                 tile_texts.append(f"[tile {ix},{iy}]\n{txt.strip()}\n")
+                debug(
+                    f"Page {page_index+1}: tile ({ix},{iy}) crop=({x0},{y0},{x1},{y1}) chars={len(txt)}"
+                )
                 pbar_tiles.update(1)
 
     ocr_text = "\n".join(tile_texts)
@@ -325,17 +399,20 @@ def process_page(doc, pdf_path: Path, page_index: int, out_dir: Path, lang: str,
     page_info["mode"] = "ocr-tiled"
     page_info["ocr_text"] = ocr_text.strip()
     page_info["raw_text"] = None
+    debug(f"Page {page_index+1}: finished OCR tiled branch chars={len(page_info['ocr_text'])}")
     return dpi, "ocr-tiled", img_cov, page_info
 
 # ------------------- PDF runner -------------------
 def process_pdf(pdf_path: Path, out_root: Path, lang: str, poppler_bin: str | None):
     out_dir = out_root / pdf_path.stem
     ensure_dir(out_dir)
+    debug(f"Processing PDF: {pdf_path} -> {out_dir}")
     page_summaries = []
     page_infos = []
 
     try:
         with fitz.open(str(pdf_path)) as doc:
+            debug(f"Opened PDF {pdf_path.name} pages={len(doc)}")
             if len(doc) == 0:
                 print(f"[WARN] Empty PDF: {pdf_path.name}")
                 return
@@ -345,6 +422,10 @@ def process_pdf(pdf_path: Path, out_root: Path, lang: str, poppler_bin: str | No
                     dpi, mode, imgcov, page_info = process_page(doc, pdf_path, p, out_dir, lang, poppler_bin)
                     page_summaries.append((p+1, dpi, mode, imgcov))
                     page_infos.append(page_info)
+                    imgcov_display = f"{imgcov:.3f}" if imgcov is not None else "n/a"
+                    debug(
+                        f"Page {p+1} summary: dpi={dpi} mode={mode} img_cov={imgcov_display}"
+                    )
                 except Exception as e:
                     (out_dir / "errors.log").open("a", encoding="utf-8").write(f"page {p+1}: {e}\n")
                     print(f"[ERROR] {pdf_path.name} page {p+1}: {e}")
@@ -364,6 +445,7 @@ def process_pdf(pdf_path: Path, out_root: Path, lang: str, poppler_bin: str | No
 
     # Combine text & save manifest
     combined = []
+    debug(f"Combining per-page text files for {pdf_path.name}")
     for p, _, _, _ in page_summaries:
         pt = out_dir / f"page_{p:03d}.txt"
         if pt.exists():
@@ -374,6 +456,7 @@ def process_pdf(pdf_path: Path, out_root: Path, lang: str, poppler_bin: str | No
 
     pd.DataFrame(page_summaries, columns=["page", "dpi", "mode", "image_coverage"])\
       .to_csv(out_dir / "manifest.csv", index=False)
+    debug(f"Wrote manifest for {pdf_path.name} with {len(page_summaries)} entries")
 
     storage_doc = {
         "document": pdf_path.name,
@@ -383,6 +466,7 @@ def process_pdf(pdf_path: Path, out_root: Path, lang: str, poppler_bin: str | No
         json.dumps(storage_doc, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    debug(f"Wrote storage.json for {pdf_path.name}")
 
 # ------------------- CLI / Main -------------------
 def parse_args(argv: Optional[Sequence[str]] = None):
@@ -415,6 +499,7 @@ def main():
     print(f"[INFO] OUTPUT_DIR: {out_dir}")
     print(f"[INFO] POPPLER_BIN: {poppler_bin}")
     print(f"[INFO] Tesseract: {pytesseract.pytesseract.tesseract_cmd}")
+    print(f"[INFO] Debug logging enabled: {DEBUG}")
 
     # List contents (helps with OneDrive placeholders)
     try:
