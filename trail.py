@@ -2,6 +2,7 @@
 import os, re, glob, argparse
 from statistics import median
 from pathlib import Path
+from typing import Optional, Sequence
 
 import fitz  # PyMuPDF
 from pdf2image import convert_from_path
@@ -251,14 +252,20 @@ def process_pdf(pdf_path: Path, out_root: Path, lang: str, poppler_bin: str | No
       .to_csv(out_dir / "manifest.csv", index=False)
 
 # ------------------- CLI / Main -------------------
-def parse_args():
+def parse_args(argv: Optional[Sequence[str]] = None):
+    """Parse CLI args but gracefully ignore stray ones from notebook launchers."""
+
     ap = argparse.ArgumentParser(description="Smart PDF text extractor (adaptive OCR).")
     ap.add_argument("--pdf-dir", default=PDF_DIR_DEFAULT, help="Folder containing PDFs.")
     ap.add_argument("--output-dir", default=OUTPUT_DIR_DEFAULT, help="Output folder.")
     ap.add_argument("--tesseract", default=TESSERACT_EXE_DEFAULT, help="Path to tesseract.exe on Windows.")
     ap.add_argument("--poppler", default=POPPLER_BIN_DEFAULT, help="Path to Poppler bin (pdfinfo.exe, pdftoppm.exe).")
     ap.add_argument("--lang", default=LANG_DEFAULT, help="Tesseract languages, e.g. 'eng' or 'eng+deu'.")
-    return ap.parse_args()
+
+    args, unknown = ap.parse_known_args(argv)
+    if unknown:
+        print(f"[WARN] Ignoring unrecognized arguments: {unknown}")
+    return args
 
 def main():
     args = parse_args()
