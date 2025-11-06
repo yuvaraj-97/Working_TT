@@ -158,6 +158,9 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context
     boxes = []
     for c in contours:
         x,y,w,h = cv2.boundingRect(c)
+        if w <= 1 or h <= 1:
+            # Reject degenerate boxes that would rasterize to empty crops later
+            continue
         if w*h < 200:       # skip tiny
             continue
         if w > W*0.98 and h > H*0.15:  # skip large outer borders
@@ -188,7 +191,15 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context
         for (x,y,w,h) in r[:col_count]:
             pad = 2
             x0,y0,x1,y1 = max(0,x+pad), max(0,y+pad), min(W,x+w-pad), min(H,y+h-pad)
-            cell = cv2pil(cv[y0:y1, x0:x1])
+            if x1 <= x0 or y1 <= y0:
+                # Degenerate crop after padding – treat as empty cell
+                row_text.append("")
+                continue
+            cell_img = cv[y0:y1, x0:x1]
+            if cell_img.size == 0:
+                row_text.append("")
+                continue
+            cell = cv2pil(cell_img)
             txt = pytesseract.image_to_string(cell, lang=lang, config=cfg_whitelist)
             row_text.append(txt.strip().replace("\n", " "))
         table.append(row_text)
@@ -412,7 +423,9 @@ def main():
     except Exception as e:
         print(f"[WARN] Could not list PDF_DIR: {e}")
 
-    pdf_files = sorted(glob.glob(str(pdf_dir / "*.pdf"))) + sorted(glob.glob(str(pdf_dir / "*.PDF")))
+    pdf_candidates = sorted(glob.glob(str(pdf_dir / "*.pdf"))) + sorted(glob.glob(str(pdf_dir / "*.PDF")))
+    # Use dict.fromkeys to preserve order while removing duplicates (Windows is case-insensitive)
+    pdf_files = list(dict.fromkeys(pdf_candidates))
     print(f"[INFO] PDFs found: {len(pdf_files)} -> {[Path(p).name for p in pdf_files]}")
 
     if not pdf_files:
