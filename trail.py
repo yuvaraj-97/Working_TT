@@ -142,9 +142,13 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context
     """
     ensure_dir(out_csv.parent)
     ctx = context or f"table:{out_csv.name}"
-    cv = pil2cv(preprocess_for_ocr(pil_img, context=ctx), context=ctx)
-    gray = cv2.cvtColor(cv, cv2.COLOR_BGR2GRAY)
-    inv = 255 - gray
+    try:
+        cv = pil2cv(preprocess_for_ocr(pil_img, context=ctx), context=ctx)
+        gray = cv2.cvtColor(cv, cv2.COLOR_BGR2GRAY)
+        inv = 255 - gray
+    except (ValueError, cv2.error) as exc:
+        print(f"[WARN] Table extraction skipped ({ctx}): {exc}")
+        return False, []
 
     H, W = inv.shape
     horiz_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(10, W // 60), 1))
@@ -199,7 +203,12 @@ def extract_table_to_csv(pil_img: Image.Image, lang: str, out_csv: Path, context
             if cell_img.size == 0:
                 row_text.append("")
                 continue
-            cell = cv2pil(cell_img)
+            try:
+                cell = cv2pil(cell_img)
+            except ValueError as exc:
+                print(f"[WARN] Skipping empty cell crop ({ctx}): {exc}")
+                row_text.append("")
+                continue
             txt = pytesseract.image_to_string(cell, lang=lang, config=cfg_whitelist)
             row_text.append(txt.strip().replace("\n", " "))
         table.append(row_text)
