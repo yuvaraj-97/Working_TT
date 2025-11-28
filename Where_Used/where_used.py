@@ -16,6 +16,7 @@ Tidy "Where used and PFEP" renderer driven by column A: "Structure Level".
 
 from __future__ import annotations
 
+import math
 import os
 import re
 from collections import defaultdict
@@ -24,6 +25,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 from matplotlib.path import Path
+from matplotlib.backends.backend_pdf import PdfPages
 
 
 # =========================
@@ -58,6 +60,8 @@ TITLE_SIZE = 22
 LEVEL_SIZE = 16
 LABEL_SIZE = 10
 FIG_DPI = 220
+# PDF page size limit (in inches). Acrobat starts warning past ~200in.
+PDF_PAGE_LIMIT_IN = 180
 
 # Arrow styling
 ARROW_LINEWIDTH = 1.2
@@ -287,46 +291,95 @@ def _render_one_excel(path: str):
     scale = min(1.0, max_px / width_px, max_px / height_px)
     effective_dpi = FIG_DPI * scale
 
-    fig, ax = plt.subplots(figsize=(width_units, height_units), dpi=effective_dpi)
-    ax.set_xlim(-1, width_units)
-    ax.set_ylim(-2.5, height_units)
-    ax.axis("off")
-
-    ax.text(
-        0,
-        height_units - 0.6,
-        TITLE,
-        fontsize=TITLE_SIZE,
-        family=FONT_FAMILY,
-        weight="bold",
-    )
-
-    for lv in range(max_lv + 1):
-        ax.text(
-            lv * COL_GAP + 0.5,
-            height_units - 1.6,
-            f"Level-{lv}",
-            fontsize=LEVEL_SIZE,
-            color="#c00",
-            family=FONT_FAMILY,
-        )
-
-    boxes = {}
+    layout = {}
     for node in nodes:
         label_text = label[node]
         width, height = _auto_box_size(label_text)
         cx = x_pos[node] + BOX_PAD_X
         cy = y_pos[node] + BOX_PAD_Y
         color = LEVEL_COLORS[level[node] % len(LEVEL_COLORS)]
-        boxes[node] = _draw_box(ax, cx, cy, width, height, label_text, color)
+        layout[node] = {
+            "label": label_text,
+            "width": width,
+            "height": height,
+            "x": cx,
+            "y": cy,
+            "color": color,
+        }
 
-    for child, par in parent.items():
-        if par in boxes and child in boxes:
-            _draw_connector(ax, boxes[par], boxes[child])
+    def draw_page(ax, x0: float, y0: float, page_w: float, page_h: float, page_idx: int | None):
+        ax.set_xlim(x0 - 1, x0 + page_w)
+        ax.set_ylim(y0 - 2.5, y0 + page_h)
+        ax.axis("off")
+
+        title_suffix = f" (page {page_idx})" if page_idx is not None else ""
+        ax.text(
+            x0,
+            y0 + page_h - 0.6,
+            TITLE + title_suffix,
+            fontsize=TITLE_SIZE,
+            family=FONT_FAMILY,
+            weight="bold",
+        )
+
+        for lv in range(max_lv + 1):
+            x_lv = lv * COL_GAP + 0.5
+            if x0 - 0.5 <= x_lv <= x0 + page_w + 0.5:
+                ax.text(
+                    x_lv,
+                    y0 + page_h - 1.6,
+                    f"Level-{lv}",
+                    fontsize=LEVEL_SIZE,
+                    color="#c00",
+                    family=FONT_FAMILY,
+                )
+
+        visible_nodes = {}
+        for node, info in layout.items():
+            if (info["x"] + info["width"] >= x0) and (info["x"] <= x0 + page_w) and (
+                info["y"] + info["height"] >= y0
+            ) and (info["y"] <= y0 + page_h):
+                visible_nodes[node] = _draw_box(
+                    ax,
+                    info["x"],
+                    info["y"],
+                    info["width"],
+                    info["height"],
+                    info["label"],
+                    info["color"],
+                )
+
+        for child, par in parent.items():
+            if par in visible_nodes and child in visible_nodes:
+                _draw_connector(ax, visible_nodes[par], visible_nodes[child])
 
     stem = os.path.splitext(path)[0]
-    fig.savefig(stem + ".png", bbox_inches="tight")
-    fig.savefig(stem + ".pdf", bbox_inches="tight")
+
+    # Full-resolution PNG (single page, raster-safe DPI).
+    fig_png, ax_png = plt.subplots(figsize=(width_units, height_units), dpi=effective_dpi)
+    draw_page(ax_png, 0, 0, width_units + 1, height_units + 2.5, None)
+    fig_png.savefig(stem + ".png", bbox_inches="tight")
+    plt.close(fig_png)
+
+    # Multi-page PDF if the page would exceed Acrobat's size limit.
+    tiles_x = max(1, math.ceil(width_units / PDF_PAGE_LIMIT_IN))
+    tiles_y = max(1, math.ceil(height_units / PDF_PAGE_LIMIT_IN))
+    page_total = tiles_x * tiles_y
+
+    with PdfPages(stem + ".pdf") as pdf:
+        page_idx = 1
+        for ty in range(tiles_y):
+            for tx in range(tiles_x):
+                x0 = tx * PDF_PAGE_LIMIT_IN
+                y0 = ty * PDF_PAGE_LIMIT_IN
+                page_w = min(PDF_PAGE_LIMIT_IN, width_units - x0)
+                page_h = min(PDF_PAGE_LIMIT_IN, height_units - y0)
+                fig, ax = plt.subplots(figsize=(page_w, page_h), dpi=FIG_DPI)
+                draw_page(ax, x0, y0, page_w, page_h, page_idx if page_total > 1 else None)
+                pdf.savefig(fig, bbox_inches="tight")
+                plt.close(fig)
+                page_idx += 1
+
     print(f" ✓ Wrote {os.path.basename(stem)}.png and .pdf")
 
 
