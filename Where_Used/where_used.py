@@ -55,6 +55,9 @@ COL_GAP = 3.2
 ROW_GAP = 1.2  # base vertical spacing between slots
 BOX_PAD_X = 0.35
 BOX_PAD_Y = 0.35
+CONTENT_TOP_PAD = 2.0  # gap before first row to keep headers clear
+BOTTOM_MARGIN = 2.0
+ROOT_GAP_SLOTS = 1.0  # blank slots inserted before each root tree
 FONT_FAMILY = "DejaVu Sans"
 TITLE_SIZE = 22
 LEVEL_SIZE = 16
@@ -62,6 +65,7 @@ LABEL_SIZE = 10
 FIG_DPI = 220
 # PDF page size limit (in inches). Acrobat starts warning past ~200in.
 PDF_PAGE_LIMIT_IN = 180
+PDF_TILE_OVERLAP = 1.5  # re-show edges so relationships are not split across pages
 
 # Arrow styling
 ARROW_LINEWIDTH = 1.2
@@ -187,7 +191,9 @@ def _layout_slots(nodes, parent, level):
             child_slots = [y_of[child] for child in children[node]]
             y_of[node] = (min(child_slots) + max(child_slots)) / 2.0
 
-    for root in roots:
+    for idx, root in enumerate(roots):
+        if idx > 0:
+            y_slot += ROOT_GAP_SLOTS
         place(root)
 
     return y_of
@@ -275,12 +281,12 @@ def _render_one_excel(path: str):
 
     y_slot = _layout_slots(nodes, parent, level)
     max_y = max(y_slot.values()) if y_slot else 0
-    y_pos = {node: (y_slot[node] * ROW_GAP) for node in nodes}
+    y_pos = {node: (y_slot[node] * ROW_GAP + CONTENT_TOP_PAD) for node in nodes}
 
     max_lv = max(level.values())
     x_pos = {node: (level[node] * COL_GAP) for node in nodes}
 
-    height_units = (max_y + 1) * ROW_GAP + 3.5
+    height_units = (max_y + 1) * ROW_GAP + CONTENT_TOP_PAD + BOTTOM_MARGIN + 1.5
     width_units = (max_lv + 1) * COL_GAP + 2
 
     # Guard against matplotlib's 2^16 px limit for raster outputs.
@@ -308,8 +314,8 @@ def _render_one_excel(path: str):
         }
 
     def draw_page(ax, x0: float, y0: float, page_w: float, page_h: float, page_idx: int | None):
-        ax.set_xlim(x0 - 1, x0 + page_w)
-        ax.set_ylim(y0 - 2.5, y0 + page_h)
+        ax.set_xlim(x0 - 1, x0 + page_w + 0.4)
+        ax.set_ylim(y0 - BOTTOM_MARGIN, y0 + page_h + 0.8)
         ax.axis("off")
 
         title_suffix = f" (page {page_idx})" if page_idx is not None else ""
@@ -362,18 +368,20 @@ def _render_one_excel(path: str):
     plt.close(fig_png)
 
     # Multi-page PDF if the page would exceed Acrobat's size limit.
-    tiles_x = max(1, math.ceil(width_units / PDF_PAGE_LIMIT_IN))
-    tiles_y = max(1, math.ceil(height_units / PDF_PAGE_LIMIT_IN))
+    tile_stride_x = PDF_PAGE_LIMIT_IN - PDF_TILE_OVERLAP
+    tile_stride_y = PDF_PAGE_LIMIT_IN - PDF_TILE_OVERLAP
+    tiles_x = max(1, math.ceil((width_units - PDF_TILE_OVERLAP) / tile_stride_x))
+    tiles_y = max(1, math.ceil((height_units - PDF_TILE_OVERLAP) / tile_stride_y))
     page_total = tiles_x * tiles_y
 
     with PdfPages(stem + ".pdf") as pdf:
         page_idx = 1
         for ty in range(tiles_y):
             for tx in range(tiles_x):
-                x0 = tx * PDF_PAGE_LIMIT_IN
-                y0 = ty * PDF_PAGE_LIMIT_IN
-                page_w = min(PDF_PAGE_LIMIT_IN, width_units - x0)
-                page_h = min(PDF_PAGE_LIMIT_IN, height_units - y0)
+                x0 = tx * tile_stride_x
+                y0 = ty * tile_stride_y
+                page_w = min(PDF_PAGE_LIMIT_IN, width_units - x0 + PDF_TILE_OVERLAP)
+                page_h = min(PDF_PAGE_LIMIT_IN, height_units - y0 + PDF_TILE_OVERLAP)
                 fig, ax = plt.subplots(figsize=(page_w, page_h), dpi=FIG_DPI)
                 draw_page(ax, x0, y0, page_w, page_h, page_idx if page_total > 1 else None)
                 pdf.savefig(fig, bbox_inches="tight")
