@@ -1,6 +1,7 @@
 /**
  * Office Script: Split the text in cell A1 of the active worksheet into
- * chunks of up to 500 characters and write them to a new worksheet.
+ * chunks of up to 500 characters and overwrite the worksheet with the
+ * chunks stored in a single-column table.
  */
 function main(workbook: ExcelScript.Workbook) {
   const maxLength = 500;
@@ -41,31 +42,15 @@ function main(workbook: ExcelScript.Workbook) {
     chunks.push(currentChunk);
   }
 
-  const outputSheet = workbook.addWorksheet(getUniqueSheetName(workbook, "Chunks"));
-  if (chunks.length === 0) {
-    outputSheet.getRange("A1").setValue("");
-    return;
+  const outputSheet = sourceSheet;
+  outputSheet.getUsedRange()?.clear(ExcelScript.ClearApplyTo.all);
+
+  const tableValues: string[][] = [["Chunk"]];
+  for (const chunk of chunks) {
+    tableValues.push([chunk]);
   }
 
-  const outputValues = chunks.map((chunk) => [chunk]);
-  outputSheet.getRangeByIndexes(0, 0, outputValues.length, 1).setValues(outputValues);
-}
-
-/**
- * Generates a worksheet name that does not conflict with existing names.
- */
-function getUniqueSheetName(workbook: ExcelScript.Workbook, baseName: string): string {
-  const existingNames = new Set(workbook.getWorksheets().map((sheet) => sheet.getName()));
-  if (!existingNames.has(baseName)) {
-    return baseName;
-  }
-
-  let suffix = 1;
-  let candidate = `${baseName} (${suffix})`;
-  while (existingNames.has(candidate)) {
-    suffix += 1;
-    candidate = `${baseName} (${suffix})`;
-  }
-
-  return candidate;
+  const tableRange = outputSheet.getRangeByIndexes(0, 0, tableValues.length, 1);
+  tableRange.setValues(tableValues);
+  outputSheet.addTable(tableRange.getAddress(), true);
 }
