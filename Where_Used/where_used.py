@@ -279,7 +279,15 @@ def _render_one_excel(path: str):
     height_units = (max_y + 1) * ROW_GAP + 3.5
     width_units = (max_lv + 1) * COL_GAP + 2
 
-    fig, ax = plt.subplots(figsize=(width_units, height_units), dpi=FIG_DPI)
+    # Guard against matplotlib's 2^16 px limit for raster outputs.
+    # PDF stays vector-based, but PNG needs dimensions within the cap.
+    max_px = (2**16) - 1
+    width_px = width_units * FIG_DPI
+    height_px = height_units * FIG_DPI
+    scale = min(1.0, max_px / width_px, max_px / height_px)
+    effective_dpi = FIG_DPI * scale
+
+    fig, ax = plt.subplots(figsize=(width_units, height_units), dpi=effective_dpi)
     ax.set_xlim(-1, width_units)
     ax.set_ylim(-2.5, height_units)
     ax.axis("off")
