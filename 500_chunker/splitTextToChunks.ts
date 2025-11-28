@@ -42,7 +42,14 @@ function main(workbook: ExcelScript.Workbook) {
     chunks.push(currentChunk);
   }
 
-  const outputSheet = sourceSheet;
+  const outputSheetName = "chunks";
+  const tableName = "chunks";
+
+  let outputSheet = workbook.getWorksheet(outputSheetName);
+  if (!outputSheet) {
+    outputSheet = workbook.addWorksheet(outputSheetName);
+  }
+
   outputSheet.getUsedRange()?.clear(ExcelScript.ClearApplyTo.all);
 
   const tableValues: string[][] = [["Chunk"]];
@@ -52,5 +59,22 @@ function main(workbook: ExcelScript.Workbook) {
 
   const tableRange = outputSheet.getRangeByIndexes(0, 0, tableValues.length, 1);
   tableRange.setValues(tableValues);
-  outputSheet.addTable(tableRange.getAddress(), true);
+
+  const existingTable = workbook
+    .getTables()
+    .find((table) => table.getName() === tableName);
+
+  if (existingTable) {
+    if (existingTable.getWorksheet().getName() !== outputSheetName) {
+      existingTable.delete();
+      const newTable = outputSheet.addTable(tableRange.getAddress(), true);
+      newTable.setName(tableName);
+    } else {
+      existingTable.resize(tableRange);
+      existingTable.getRange().setValues(tableValues);
+    }
+  } else {
+    const newTable = outputSheet.addTable(tableRange.getAddress(), true);
+    newTable.setName(tableName);
+  }
 }
