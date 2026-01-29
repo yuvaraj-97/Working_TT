@@ -2,28 +2,10 @@
  "cells": [
   {
    "cell_type": "code",
-   "execution_count": 1,
+   "execution_count": null,
    "id": "a4fdadb3-d183-4b1b-9610-df49da3e71ac",
    "metadata": {},
-   "outputs": [
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Cleared directory: C:\\\\Users\\\\u113784\\\\OneDrive - Trane Technologies\\\\Documents\\\\Python Code\\\\SVM\\\\SVM-7\\\\Predictions\n",
-      "Cleared directory: C:\\\\Users\\\\u113784\\\\OneDrive - Trane Technologies\\\\Documents\\\\Python Code\\\\SVM\\\\SVM-7\\\\PKL\n",
-      "Cleared file: C:\\\\Users\\\\u113784\\\\OneDrive - Trane Technologies\\\\Documents\\\\Python Code\\\\SVM\\\\SVM-7\\\\Reference Data_Update.xlsx\n",
-      "Cleared file: C:\\\\Users\\\\u113784\\\\OneDrive - Trane Technologies\\\\Documents\\\\Python Code\\\\SVM\\\\SVM-7\\\\Reference Data_Dropped.xlsx\n",
-      "Cleared file: C:\\\\Users\\\\u113784\\\\OneDrive - Trane Technologies\\\\Documents\\\\Python Code\\\\SVM\\\\SVM-7\\\\Single_Class_Groups.xlsx\n",
-      "Cleared file: C:\\\\Users\\\\u113784\\\\OneDrive - Trane Technologies\\\\Documents\\\\Python Code\\\\SVM\\\\SVM-7\\\\Model_Info.xlsx\n",
-      "Cleared file: C:\\\\Users\\\\u113784\\\\OneDrive - Trane Technologies\\\\Documents\\\\Python Code\\\\SVM\\\\SVM-7\\\\Unprocessed_Input_Data.xlsx\n",
-      "Cleared file: C:\\\\Users\\\\u113784\\\\OneDrive - Trane Technologies\\\\Documents\\\\Python Code\\\\SVM\\\\SVM-7\\\\Grouped_Input_Data.csv\n",
-      "Cleared file: C:\\\\Users\\\\u113784\\\\OneDrive - Trane Technologies\\\\Documents\\\\Python Code\\\\SVM\\\\SVM-7\\\\merged_output.xlsx\n",
-      "Cleared file: C:\\\\Users\\\\u113784\\\\OneDrive - Trane Technologies\\\\Documents\\\\Python Code\\\\SVM\\\\SVM-7\\\\updated_merged_output.xlsx\n",
-      "Cleared file: C:\\\\Users\\\\u113784\\\\OneDrive - Trane Technologies\\\\Documents\\\\Python Code\\\\SVM\\\\SVM-7\\\\Block-2.log\n"
-     ]
-    }
-   ],
+   "outputs": [],
    "source": [
     "import os\n",
     "\n",
@@ -67,26 +49,10 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 2,
+   "execution_count": null,
    "id": "b99b2b4c-e312-4c19-9ac1-b6481b3ba4bd",
    "metadata": {},
-   "outputs": [
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Data has been read from Reference data-1.xlsx\n",
-      "Initial data count: 645262\n",
-      "Data count after removing duplicates: 645262\n",
-      "Extracting first words...\n",
-      "Data count after dropping single alphabet and empty First_Word: 643329\n",
-      "Extracting partial taxonomy nodes...\n",
-      "Data has been saved to Reference Data_Update.xlsx\n",
-      "Dropped data has been saved to Reference Data_Dropped.xlsx\n",
-      "Processing completed.\n"
-     ]
-    }
-   ],
+   "outputs": [],
    "source": [
     "#Block-1:- Imports and Preprocessing\n",
     "import pandas as pd\n",
@@ -223,18 +189,10 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 3,
+   "execution_count": null,
    "id": "b47047ca-69b7-446d-aff2-c8d8ae1e3d27",
    "metadata": {},
-   "outputs": [
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Processing groups: 100%|██████████| 29/29 [31:39<00:00, 65.50s/it] \n"
-     ]
-    }
-   ],
+   "outputs": [],
    "source": [
     "#Block-2:- Model Training\n",
     "\n",
@@ -388,379 +346,10 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 4,
+   "execution_count": null,
    "id": "f9e47956-247a-41cd-992f-f64adbd28fe3",
    "metadata": {},
-   "outputs": [
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Imports and Utility Functions Completed.\n",
-      "Reading and Preprocessing Data...\n",
-      "Input data read successfully from C:\\Users\\u113784\\OneDrive - Trane Technologies\\Documents\\Python Code\\SVM\\SVM-7\\Input File.xlsx.\n",
-      "Reference data read successfully from Reference Data_Update.xlsx.\n",
-      "Data merged successfully.\n",
-      "Unprocessed input data saved successfully to Unprocessed_Input_Data.xlsx.\n",
-      "Data grouped successfully.\n",
-      "Grouped data saved successfully to Grouped_Input_Data.csv.\n",
-      "Starting Prediction...\n",
-      "Grouped input data read successfully from Grouped_Input_Data.csv.\n",
-      "Model info read successfully from Model_Info.xlsx.\n",
-      "Prediction in progress...\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:   0%|          | 0/29 [00:00<?, ?group/s]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Coils with 3108 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:   3%|▎         | 1/29 [00:11<05:13, 11.21s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Compressors with 3295 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:   7%|▋         | 2/29 [00:19<04:11,  9.32s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Controls, Sensors & Valves\\Controls with 9722 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  10%|█         | 3/29 [01:14<13:06, 30.25s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Controls, Sensors & Valves\\Sensors with 4180 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  14%|█▍        | 4/29 [01:16<07:58, 19.14s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Controls, Sensors & Valves\\Thermostats with 2652 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  17%|█▋        | 5/29 [01:17<04:59, 12.47s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Controls, Sensors & Valves\\Valves with 4445 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  21%|██        | 6/29 [01:24<04:05, 10.69s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Equipment Accessories with 10319 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  24%|██▍       | 7/29 [01:42<04:51, 13.23s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Filtration & Purification with 3788 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  34%|███▍      | 10/29 [01:48<01:47,  5.67s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Indoor Air Quality (IAQ) and Ventilation\\Air Purification with 1546 items\n",
-      "Processing group: Parts and Supplies\\Indoor Air Quality (IAQ) and Ventilation\\Humidity Control with 1183 items\n",
-      "Processing group: Parts and Supplies\\Indoor Air Quality (IAQ) and Ventilation\\Indoor Air Quality (IAQ) and Ventilation Uncategorized with 4588 items\n",
-      "Processing group: Parts and Supplies\\Indoor Air Quality (IAQ) and Ventilation\\Ventilation with 1062 items\n",
-      "Processing group: Parts and Supplies\\Motors with 7124 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  45%|████▍     | 13/29 [02:53<03:41, 13.83s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Refrigerant & Oil\\Oils with 580 items\n",
-      "Processing group: Parts and Supplies\\Refrigerant & Oil\\Refrigerant with 78 items\n",
-      "Processing group: Parts and Supplies\\Refrigerant & Oil\\Refrigeration Equipment & Parts with 1795 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  55%|█████▌    | 16/29 [02:54<01:44,  8.07s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Rental Units, Parts & Accessories with 26 items\n",
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Apparel & Safety Supplies with 2137 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  62%|██████▏   | 18/29 [02:54<01:04,  5.86s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Chemicals & Cleaners with 3945 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  66%|██████▌   | 19/29 [02:58<00:54,  5.48s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Doors & Panels with 4942 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  69%|██████▉   | 20/29 [03:01<00:44,  4.95s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Ducting & Sheet Metal with 9861 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  72%|███████▏  | 21/29 [03:38<01:35, 11.94s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Electrical Parts & Supplies with 10144 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  76%|███████▌  | 22/29 [05:47<04:38, 39.76s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Fasteners & Hardware with 8523 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  83%|████████▎ | 24/29 [06:28<02:27, 29.41s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Filter Driers with 669 items\n",
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Fittings with 6314 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  86%|████████▌ | 25/29 [06:46<01:45, 26.37s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Heating Parts & Supplies with 7055 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  90%|████████▉ | 26/29 [07:13<01:19, 26.50s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Installation & Maintenance Supplies with 9018 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  93%|█████████▎| 27/29 [08:43<01:29, 44.85s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Misc. Other with 3173 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting:  97%|█████████▋| 28/29 [08:44<00:31, 31.89s/group]"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Processing group: Parts and Supplies\\Service Parts & Supplies\\Tools & Test Instruments with 3888 items\n"
-     ]
-    },
-    {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "Predicting: 100%|██████████| 29/29 [09:29<00:00, 19.64s/group]\n"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Saving Predictions...\n",
-      "Predictions for Parts and Supplies\\Coils saved successfully to Predictions\\Predictions_Parts and Supplies_Coils.xlsx.\n",
-      "Predictions for Parts and Supplies\\Compressors saved successfully to Predictions\\Predictions_Parts and Supplies_Compressors.xlsx.\n",
-      "Predictions for Parts and Supplies\\Controls, Sensors & Valves\\Controls saved successfully to Predictions\\Predictions_Parts and Supplies_Controls, Sensors & Valves_Controls.xlsx.\n",
-      "Predictions for Parts and Supplies\\Controls, Sensors & Valves\\Sensors saved successfully to Predictions\\Predictions_Parts and Supplies_Controls, Sensors & Valves_Sensors.xlsx.\n",
-      "Predictions for Parts and Supplies\\Controls, Sensors & Valves\\Thermostats saved successfully to Predictions\\Predictions_Parts and Supplies_Controls, Sensors & Valves_Thermostats.xlsx.\n",
-      "Predictions for Parts and Supplies\\Controls, Sensors & Valves\\Valves saved successfully to Predictions\\Predictions_Parts and Supplies_Controls, Sensors & Valves_Valves.xlsx.\n",
-      "Predictions for Parts and Supplies\\Equipment Accessories saved successfully to Predictions\\Predictions_Parts and Supplies_Equipment Accessories.xlsx.\n",
-      "Predictions for Parts and Supplies\\Filtration & Purification saved successfully to Predictions\\Predictions_Parts and Supplies_Filtration & Purification.xlsx.\n",
-      "Predictions for Parts and Supplies\\Indoor Air Quality (IAQ) and Ventilation\\Air Purification saved successfully to Predictions\\Predictions_Parts and Supplies_Indoor Air Quality (IAQ) and Ventilation_Air Purification.xlsx.\n",
-      "Predictions for Parts and Supplies\\Indoor Air Quality (IAQ) and Ventilation\\Humidity Control saved successfully to Predictions\\Predictions_Parts and Supplies_Indoor Air Quality (IAQ) and Ventilation_Humidity Control.xlsx.\n",
-      "Predictions for Parts and Supplies\\Indoor Air Quality (IAQ) and Ventilation\\Ventilation saved successfully to Predictions\\Predictions_Parts and Supplies_Indoor Air Quality (IAQ) and Ventilation_Ventilation.xlsx.\n",
-      "Predictions for Parts and Supplies\\Motors saved successfully to Predictions\\Predictions_Parts and Supplies_Motors.xlsx.\n",
-      "Predictions for Parts and Supplies\\Refrigerant & Oil\\Oils saved successfully to Predictions\\Predictions_Parts and Supplies_Refrigerant & Oil_Oils.xlsx.\n",
-      "Predictions for Parts and Supplies\\Refrigerant & Oil\\Refrigerant saved successfully to Predictions\\Predictions_Parts and Supplies_Refrigerant & Oil_Refrigerant.xlsx.\n",
-      "Predictions for Parts and Supplies\\Refrigerant & Oil\\Refrigeration Equipment & Parts saved successfully to Predictions\\Predictions_Parts and Supplies_Refrigerant & Oil_Refrigeration Equipment & Parts.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Apparel & Safety Supplies saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Apparel & Safety Supplies.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Chemicals & Cleaners saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Chemicals & Cleaners.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Doors & Panels saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Doors & Panels.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Ducting & Sheet Metal saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Ducting & Sheet Metal.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Electrical Parts & Supplies saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Electrical Parts & Supplies.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Fasteners & Hardware saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Fasteners & Hardware.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Filter Driers saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Filter Driers.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Fittings saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Fittings.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Heating Parts & Supplies saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Heating Parts & Supplies.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Installation & Maintenance Supplies saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Installation & Maintenance Supplies.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Misc. Other saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Misc. Other.xlsx.\n",
-      "Predictions for Parts and Supplies\\Service Parts & Supplies\\Tools & Test Instruments saved successfully to Predictions\\Predictions_Parts and Supplies_Service Parts & Supplies_Tools & Test Instruments.xlsx.\n",
-      "Prediction processing completed.\n",
-      "Merging and Selecting Best Predictions...\n",
-      "All files have been merged successfully into merged_output.xlsx\n",
-      "Handling Missing Partial Taxonomy Node and First Word...\n",
-      "Input data read successfully from C:\\Users\\u113784\\OneDrive - Trane Technologies\\Documents\\Python Code\\SVM\\SVM-7\\Input File.xlsx.\n",
-      "Top predictions data read successfully from C:\\Users\\u113784\\OneDrive - Trane Technologies\\Documents\\Python Code\\SVM\\SVM-7\\Top Prediction File\\top_predictions_08-10-2025.xlsx.\n",
-      "Missing partial taxonomy node data saved successfully to C:\\Users\\u113784\\OneDrive - Trane Technologies\\Documents\\Python Code\\SVM\\SVM-7\\Missing_partial_taxonomy_node Files\\missing_partial_taxonomy_node_08-10-2025.xlsx.\n"
-     ]
-    }
-   ],
+   "outputs": [],
    "source": [
     "#Block-3 Predication\n",
     "import pandas as pd\n",
@@ -1114,22 +703,10 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 5,
+   "execution_count": null,
    "id": "7b8473d4-bcae-4a0b-b214-540a51a5c5c1",
    "metadata": {},
-   "outputs": [
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "Excel file read successfully.\n",
-      "Input data read successfully for total items count.\n",
-      "Top predictions data read successfully for categorized items count.\n",
-      "Missing partial taxonomy node data read successfully for not categorized items count.\n",
-      "Excel file updated successfully.\n"
-     ]
-    }
-   ],
+   "outputs": [],
    "source": [
     "#Code-4 Updating to Excel\n",
     "import pandas as pd\n",
